@@ -12,6 +12,10 @@ type RequestOptions = {
   body?: unknown
 }
 
+type LoginData = {
+  id?: number | string
+}
+
 function buildQuery(query: RequestOptions['query']): string {
   if (!query) return ''
   const params = new URLSearchParams()
@@ -26,11 +30,13 @@ function buildQuery(query: RequestOptions['query']): string {
 export class NewApiClient {
   private readonly config: AppConfig['newApi']
   private sessionCookie?: string
+  private sessionUserId?: string
   private loginPromise?: Promise<void>
 
   constructor(config: AppConfig['newApi']) {
     this.config = config
     this.sessionCookie = config.cookie
+    this.sessionUserId = config.userHeader
   }
 
   async getChannels(): Promise<ChannelListData> {
@@ -107,6 +113,7 @@ export class NewApiClient {
       if (!response.ok) {
         if (response.status === 401 && retryAfterLogin) {
           this.sessionCookie = undefined
+          this.sessionUserId = this.config.userHeader
           await this.ensureSession(true)
           return this.requestWithSession<T>(path, options, false)
         }
@@ -159,7 +166,7 @@ export class NewApiClient {
         signal: controller.signal,
       })
       const text = await response.text()
-      const json = text ? (JSON.parse(text) as ApiEnvelope<unknown>) : {}
+      const json = text ? (JSON.parse(text) as ApiEnvelope<LoginData>) : {}
 
       if (!response.ok || json.success === false) {
         throw new Error(
@@ -174,6 +181,10 @@ export class NewApiClient {
         throw new Error('new-api login succeeded but Set-Cookie was empty')
       }
       this.sessionCookie = cookie
+      const userId = json.data?.id
+      if (userId !== undefined && userId !== null) {
+        this.sessionUserId = String(userId)
+      }
     } finally {
       clearTimeout(timeout)
     }
@@ -189,8 +200,9 @@ export class NewApiClient {
     if (this.config.authorization) {
       headers.Authorization = this.config.authorization
     }
-    if (this.config.userHeader) {
-      headers['New-Api-User'] = this.config.userHeader
+    const userHeader = this.config.userHeader || this.sessionUserId
+    if (userHeader) {
+      headers['New-Api-User'] = userHeader
     }
     return headers
   }

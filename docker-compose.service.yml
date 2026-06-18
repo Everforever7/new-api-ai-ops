@@ -11,6 +11,8 @@ services:
       NEWAPI_PASSWORD: "${NEWAPI_ADMIN_PASSWORD}"
       # If dashboard login is protected by 2FA/Turnstile, use a copied Cookie instead:
       # NEWAPI_COOKIE: "${NEWAPI_COOKIE}"
+      # Required when using NEWAPI_COOKIE or NEWAPI_AUTHORIZATION directly.
+      NEWAPI_USER_HEADER: "${NEWAPI_USER_HEADER:-}"
       LLM_BASE_URL: "http://new-api:3000/v1"
       LLM_API_KEY: "${AI_OPS_LLM_API_KEY}"
       LLM_MODEL: "gpt-4.1-mini"

@@ -32,8 +32,12 @@ paste the full cookie string.
 
 For Docker deployment, you can use `NEWAPI_USERNAME` and `NEWAPI_PASSWORD`
 instead. The sidecar logs in through `/api/user/login` and keeps the session
-cookie in memory. If Turnstile or 2FA blocks dashboard login, use
-`NEWAPI_COOKIE` instead.
+cookie in memory. It also reads the login response user id and sends it as the
+`New-Api-User` header required by new-api admin APIs.
+
+If Turnstile or 2FA blocks dashboard login, use `NEWAPI_COOKIE` instead. Cookie
+or direct authorization mode also needs `NEWAPI_USER_HEADER`, usually the admin
+user id, for example `1`.
 
 For `LLM_BASE_URL`, you can point it to your own `new-api` endpoint:
 
@@ -126,6 +130,7 @@ Example service:
       NEWAPI_BASE_URL: "http://new-api:3000"
       NEWAPI_USERNAME: "${NEWAPI_ADMIN_USERNAME}"
       NEWAPI_PASSWORD: "${NEWAPI_ADMIN_PASSWORD}"
+      NEWAPI_USER_HEADER: "${NEWAPI_USER_HEADER:-}"
       LLM_BASE_URL: "http://new-api:3000/v1"
       LLM_API_KEY: "${AI_OPS_LLM_API_KEY}"
       DISCORD_WEBHOOK_URL: "${AI_OPS_DISCORD_WEBHOOK_URL}"
@@ -148,6 +153,11 @@ hostname to:
 ```text
 http://new-api-ai-ops:8787
 ```
+
+`http://new-api-ai-ops:8787` is an internal Docker service address. It works
+from other containers on the same compose network, such as Cloudflare Tunnel,
+but it is not a public browser URL by itself. Public access still needs a real
+domain routed by Cloudflare Tunnel, Nginx, or another reverse proxy.
 
 ## Safety Model
 
