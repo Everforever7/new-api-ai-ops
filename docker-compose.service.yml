@@ -1,7 +1,6 @@
 services:
   new-api-ai-ops:
-    build:
-      context: .
+    image: ghcr.io/everforever7/new-api-ai-ops:latest
     container_name: new-api-ai-ops
     restart: always
     depends_on:

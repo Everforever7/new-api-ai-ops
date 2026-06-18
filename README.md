@@ -61,6 +61,17 @@ bun run start
 
 The interval is controlled by `REPORT_INTERVAL_MINUTES`.
 
+## Docker Image
+
+GitHub Actions publishes the image to GHCR when `main` is pushed:
+
+```text
+ghcr.io/everforever7/new-api-ai-ops:latest
+```
+
+Manual releases can also be started from the repository's Actions tab through
+`Publish Docker image`.
+
 ## Docker Compose
 
 The sidecar can run in the same compose stack as `new-api`.
@@ -76,8 +87,7 @@ Example service:
 
 ```yaml
   new-api-ai-ops:
-    build:
-      context: /mnt/Save/apps/new-api-ai-ops
+    image: ghcr.io/everforever7/new-api-ai-ops:latest
     container_name: new-api-ai-ops
     restart: always
     depends_on:
@@ -95,12 +105,6 @@ Example service:
     volumes:
       - /mnt/Save/apps/new-api/ai_ops_reports:/app/reports
     networks: [newapi-net]
-```
-
-If you build an image and push it to GHCR later, replace `build:` with:
-
-```yaml
-    image: ghcr.io/your-name/new-api-ai-ops:latest
 ```
 
 ## Safety Model
