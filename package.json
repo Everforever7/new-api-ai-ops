@@ -1,0 +1,17 @@
+{
+  "name": "new-api-ai-ops",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Sidecar AI operations assistant for new-api.",
+  "scripts": {
+    "once": "bun run src/index.ts once",
+    "start": "bun run src/index.ts start",
+    "dry-run": "bun run src/index.ts once --dry-run",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@types/bun": "^1.3.3",
+    "typescript": "^5.9.3"
+  }
+}
