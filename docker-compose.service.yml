@@ -1,0 +1,28 @@
+services:
+  new-api-ai-ops:
+    build:
+      context: .
+    container_name: new-api-ai-ops
+    restart: always
+    depends_on:
+      - new-api
+    environment:
+      NEWAPI_BASE_URL: "http://new-api:3000"
+      NEWAPI_USERNAME: "${NEWAPI_ADMIN_USERNAME}"
+      NEWAPI_PASSWORD: "${NEWAPI_ADMIN_PASSWORD}"
+      # If dashboard login is protected by 2FA/Turnstile, use a copied Cookie instead:
+      # NEWAPI_COOKIE: "${NEWAPI_COOKIE}"
+      LLM_BASE_URL: "http://new-api:3000/v1"
+      LLM_API_KEY: "${AI_OPS_LLM_API_KEY}"
+      LLM_MODEL: "gpt-4.1-mini"
+      DISCORD_WEBHOOK_URL: "${AI_OPS_DISCORD_WEBHOOK_URL}"
+      REPORT_INTERVAL_MINUTES: "15"
+      NEWAPI_LOG_HOURS: "1"
+      AUTO_EXECUTE: "false"
+      TZ: "${TZ}"
+      HTTP_PROXY: "http://192.168.0.60:7890"
+      HTTPS_PROXY: "http://192.168.0.60:7890"
+      NO_PROXY: "localhost,127.0.0.1,new-api,mysql,redis,chatgpt2api"
+    volumes:
+      - /mnt/Save/apps/new-api/ai_ops_reports:/app/reports
+    networks: [newapi-net]

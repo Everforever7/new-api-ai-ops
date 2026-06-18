@@ -2,6 +2,8 @@ export type AppConfig = {
   newApi: {
     baseUrl: string
     cookie?: string
+    username?: string
+    password?: string
     authorization?: string
     userHeader?: string
     extraHeaders: Record<string, string>
@@ -78,6 +80,8 @@ export function loadConfig(): AppConfig {
     newApi: {
       baseUrl: cleanUrl(process.env.NEWAPI_BASE_URL || 'http://localhost:3000'),
       cookie: optional(process.env.NEWAPI_COOKIE),
+      username: optional(process.env.NEWAPI_USERNAME),
+      password: optional(process.env.NEWAPI_PASSWORD),
       authorization: optional(process.env.NEWAPI_AUTHORIZATION),
       userHeader: optional(process.env.NEWAPI_USER_HEADER),
       extraHeaders: extraHeadersEnv(),

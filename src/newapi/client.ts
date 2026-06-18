@@ -25,9 +25,12 @@ function buildQuery(query: RequestOptions['query']): string {
 
 export class NewApiClient {
   private readonly config: AppConfig['newApi']
+  private sessionCookie?: string
+  private loginPromise?: Promise<void>
 
   constructor(config: AppConfig['newApi']) {
     this.config = config
+    this.sessionCookie = config.cookie
   }
 
   async getChannels(): Promise<ChannelListData> {
@@ -77,6 +80,15 @@ export class NewApiClient {
   }
 
   private async request<T>(path: string, options: RequestOptions = {}) {
+    await this.ensureSession()
+    return this.requestWithSession<T>(path, options, true)
+  }
+
+  private async requestWithSession<T>(
+    path: string,
+    options: RequestOptions = {},
+    retryAfterLogin: boolean
+  ): Promise<T> {
     const controller = new AbortController()
     const timeout = setTimeout(() => controller.abort(), this.config.timeoutMs)
     const url = `${this.config.baseUrl}${path}${buildQuery(options.query)}`
@@ -93,6 +105,11 @@ export class NewApiClient {
       const json = text ? (JSON.parse(text) as ApiEnvelope<T>) : {}
 
       if (!response.ok) {
+        if (response.status === 401 && retryAfterLogin) {
+          this.sessionCookie = undefined
+          await this.ensureSession(true)
+          return this.requestWithSession<T>(path, options, false)
+        }
         throw new Error(
           `new-api ${response.status} ${response.statusText}: ${
             json.message || text.slice(0, 300)
@@ -111,13 +128,64 @@ export class NewApiClient {
     }
   }
 
+  private async ensureSession(force = false) {
+    if (!force && this.sessionCookie) return
+    if (!this.config.username || !this.config.password) return
+
+    this.loginPromise ??= this.login()
+    try {
+      await this.loginPromise
+    } finally {
+      this.loginPromise = undefined
+    }
+  }
+
+  private async login() {
+    const controller = new AbortController()
+    const timeout = setTimeout(() => controller.abort(), this.config.timeoutMs)
+
+    try {
+      const response = await fetch(`${this.config.baseUrl}/api/user/login`, {
+        method: 'POST',
+        headers: {
+          Accept: 'application/json',
+          'Content-Type': 'application/json',
+          ...this.config.extraHeaders,
+        },
+        body: JSON.stringify({
+          username: this.config.username,
+          password: this.config.password,
+        }),
+        signal: controller.signal,
+      })
+      const text = await response.text()
+      const json = text ? (JSON.parse(text) as ApiEnvelope<unknown>) : {}
+
+      if (!response.ok || json.success === false) {
+        throw new Error(
+          `new-api login failed: ${response.status} ${
+            json.message || text.slice(0, 300)
+          }`
+        )
+      }
+
+      const cookie = extractCookieHeader(response.headers)
+      if (!cookie) {
+        throw new Error('new-api login succeeded but Set-Cookie was empty')
+      }
+      this.sessionCookie = cookie
+    } finally {
+      clearTimeout(timeout)
+    }
+  }
+
   private headers(hasBody: boolean) {
     const headers: Record<string, string> = {
       Accept: 'application/json',
       ...this.config.extraHeaders,
     }
     if (hasBody) headers['Content-Type'] = 'application/json'
-    if (this.config.cookie) headers.Cookie = this.config.cookie
+    if (this.sessionCookie) headers.Cookie = this.sessionCookie
     if (this.config.authorization) {
       headers.Authorization = this.config.authorization
     }
@@ -126,4 +194,25 @@ export class NewApiClient {
     }
     return headers
   }
+}
+
+function extractCookieHeader(headers: Headers) {
+  const headerWithGetter = headers as Headers & {
+    getSetCookie?: () => string[]
+  }
+  const setCookies =
+    typeof headerWithGetter.getSetCookie === 'function'
+      ? headerWithGetter.getSetCookie()
+      : splitCombinedSetCookie(headers.get('set-cookie'))
+
+  const pairs = setCookies
+    .map((cookie) => cookie.split(';')[0]?.trim())
+    .filter((cookie): cookie is string => Boolean(cookie))
+
+  return pairs.join('; ')
+}
+
+function splitCombinedSetCookie(value: string | null) {
+  if (!value) return []
+  return value.split(/,(?=\s*[^;,\s]+=)/g).map((part) => part.trim())
 }

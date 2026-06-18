@@ -25,7 +25,14 @@ copy .env.example .env
 
 Then edit `.env`.
 
-For `NEWAPI_COOKIE`, log in to your `new-api` dashboard as an admin, copy the dashboard request Cookie header, and paste the full cookie string.
+For local testing, `NEWAPI_COOKIE` is the most reliable option: log in to your
+`new-api` dashboard as an admin, copy the dashboard request Cookie header, and
+paste the full cookie string.
+
+For Docker deployment, you can use `NEWAPI_USERNAME` and `NEWAPI_PASSWORD`
+instead. The sidecar logs in through `/api/user/login` and keeps the session
+cookie in memory. If Turnstile or 2FA blocks dashboard login, use
+`NEWAPI_COOKIE` instead.
 
 For `LLM_BASE_URL`, you can point it to your own `new-api` endpoint:
 
@@ -53,6 +60,48 @@ bun run start
 ```
 
 The interval is controlled by `REPORT_INTERVAL_MINUTES`.
+
+## Docker Compose
+
+The sidecar can run in the same compose stack as `new-api`.
+
+Use internal service URLs:
+
+```env
+NEWAPI_BASE_URL=http://new-api:3000
+LLM_BASE_URL=http://new-api:3000/v1
+```
+
+Example service:
+
+```yaml
+  new-api-ai-ops:
+    build:
+      context: /mnt/Save/apps/new-api-ai-ops
+    container_name: new-api-ai-ops
+    restart: always
+    depends_on:
+      - new-api
+    environment:
+      NEWAPI_BASE_URL: "http://new-api:3000"
+      NEWAPI_USERNAME: "${NEWAPI_ADMIN_USERNAME}"
+      NEWAPI_PASSWORD: "${NEWAPI_ADMIN_PASSWORD}"
+      LLM_BASE_URL: "http://new-api:3000/v1"
+      LLM_API_KEY: "${AI_OPS_LLM_API_KEY}"
+      DISCORD_WEBHOOK_URL: "${AI_OPS_DISCORD_WEBHOOK_URL}"
+      REPORT_INTERVAL_MINUTES: "15"
+      AUTO_EXECUTE: "false"
+      TZ: "${TZ}"
+    volumes:
+      - /mnt/Save/apps/new-api/ai_ops_reports:/app/reports
+    networks: [newapi-net]
+```
+
+If you build an image and push it to GHCR later, replace `build:` with:
+
+```yaml
+    image: ghcr.io/your-name/new-api-ai-ops:latest
+```
 
 ## Safety Model
 
