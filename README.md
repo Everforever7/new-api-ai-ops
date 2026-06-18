@@ -13,6 +13,7 @@ This project stays outside the main `new-api` repository. It reads status from `
 - Generate a Chinese Markdown report with an LLM.
 - Send the report to Discord through a webhook.
 - Save local report copies under `reports/`.
+- Expose a lightweight Basic Auth management panel.
 - Do not modify channels automatically.
 
 ## Setup
@@ -61,6 +62,35 @@ bun run start
 
 The interval is controlled by `REPORT_INTERVAL_MINUTES`.
 
+## Management Panel
+
+The sidecar includes a lightweight web panel on port `8787`.
+
+Set a password before exposing it:
+
+```env
+PANEL_ENABLED=true
+PANEL_HOST=0.0.0.0
+PANEL_PORT=8787
+PANEL_USERNAME=admin
+PANEL_PASSWORD=change-this-password
+```
+
+Run the panel without the scheduler for local checks:
+
+```bash
+bun run panel
+```
+
+In normal Docker mode, `bun run start` starts both the scheduler and the panel.
+
+Panel capabilities in the first version:
+
+- view sidecar status;
+- run a manual check without sending Discord by default;
+- view the latest report;
+- view a sanitized channel snapshot.
+
 ## Docker Image
 
 GitHub Actions publishes the image to GHCR when `main` is pushed:
@@ -101,10 +131,22 @@ Example service:
       DISCORD_WEBHOOK_URL: "${AI_OPS_DISCORD_WEBHOOK_URL}"
       REPORT_INTERVAL_MINUTES: "15"
       AUTO_EXECUTE: "false"
+      PANEL_ENABLED: "true"
+      PANEL_USERNAME: "${AI_OPS_PANEL_USERNAME:-admin}"
+      PANEL_PASSWORD: "${AI_OPS_PANEL_PASSWORD}"
       TZ: "${TZ}"
+    ports:
+      - "8787:8787"
     volumes:
       - /mnt/Save/apps/new-api/ai_ops_reports:/app/reports
     networks: [newapi-net]
+```
+
+If you use Cloudflare Tunnel, you can remove `ports:` and route a public
+hostname to:
+
+```text
+http://new-api-ai-ops:8787
 ```
 
 ## Safety Model

@@ -7,6 +7,7 @@
   "scripts": {
     "once": "bun run src/index.ts once",
     "start": "bun run src/index.ts start",
+    "panel": "bun run src/index.ts panel",
     "dry-run": "bun run src/index.ts once --dry-run",
     "typecheck": "tsc --noEmit"
   },

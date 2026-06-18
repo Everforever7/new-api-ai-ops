@@ -33,6 +33,13 @@ export type AppConfig = {
   policy: {
     autoExecute: boolean
   }
+  panel: {
+    enabled: boolean
+    host: string
+    port: number
+    username: string
+    password?: string
+  }
 }
 
 function cleanUrl(value: string): string {
@@ -110,6 +117,13 @@ export function loadConfig(): AppConfig {
     },
     policy: {
       autoExecute: booleanEnv('AUTO_EXECUTE'),
+    },
+    panel: {
+      enabled: booleanEnv('PANEL_ENABLED', true),
+      host: process.env.PANEL_HOST?.trim() || '0.0.0.0',
+      port: numberEnv('PANEL_PORT', 8787),
+      username: process.env.PANEL_USERNAME?.trim() || 'admin',
+      password: optional(process.env.PANEL_PASSWORD),
     },
   }
 }

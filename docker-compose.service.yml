@@ -18,10 +18,19 @@ services:
       REPORT_INTERVAL_MINUTES: "15"
       NEWAPI_LOG_HOURS: "1"
       AUTO_EXECUTE: "false"
+      PANEL_ENABLED: "true"
+      PANEL_HOST: "0.0.0.0"
+      PANEL_PORT: "8787"
+      PANEL_USERNAME: "${AI_OPS_PANEL_USERNAME:-admin}"
+      PANEL_PASSWORD: "${AI_OPS_PANEL_PASSWORD}"
       TZ: "${TZ}"
       HTTP_PROXY: "http://192.168.0.60:7890"
       HTTPS_PROXY: "http://192.168.0.60:7890"
       NO_PROXY: "localhost,127.0.0.1,new-api,mysql,redis,chatgpt2api"
+    # For direct host access. If Cloudflare Tunnel routes to
+    # http://new-api-ai-ops:8787, this ports section can be removed.
+    ports:
+      - "8787:8787"
     volumes:
       - /mnt/Save/apps/new-api/ai_ops_reports:/app/reports
     networks: [newapi-net]
