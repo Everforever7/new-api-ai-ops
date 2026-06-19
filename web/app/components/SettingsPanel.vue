@@ -1,5 +1,5 @@
 <script setup>
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
 import {
   Activity,
   BarChart3,
@@ -30,6 +30,7 @@ const props = defineProps({
 })
 
 const emit = defineEmits(['updateSetting', 'saveSettings', 'reloadSettings'])
+const activeSettingsTab = ref('execution')
 
 const permissionRows = computed(() => [
   {
@@ -96,6 +97,24 @@ const confirmationOptions = computed(() => [
   { value: 'auto', label: props.t('settings.confirmation.auto') },
   { value: 'confirm', label: props.t('settings.confirmation.confirm') },
   { value: 'never', label: props.t('settings.confirmation.never') },
+])
+
+const settingsTabs = computed(() => [
+  {
+    id: 'execution',
+    icon: ShieldCheck,
+    label: props.t('settings.execution.title'),
+  },
+  {
+    id: 'prompt',
+    icon: Brain,
+    label: props.t('settings.prompt.title'),
+  },
+  {
+    id: 'protected',
+    icon: Lock,
+    label: props.t('settings.protected.title'),
+  },
 ])
 
 function settingValue(path) {
@@ -189,291 +208,311 @@ function logout() {
         </div>
       </article>
 
-      <article class="bento-item bento-full settings-execution high-density">
-        <div class="bento-header">
+      <article class="bento-item bento-full adaptive-bento settings-panel high-density">
+        <div class="bento-header settings-panel-header">
           <div class="bento-icon-wrapper">
             <ShieldCheck :size="24" />
           </div>
           <h3>{{ t('settings.execution.title') }}</h3>
         </div>
 
-        <div class="settings-stack">
-          <div class="settings-control-row">
-            <div class="settings-inline-main">
-              <div class="bento-label">{{ t('settings.globalSwitch') }}</div>
-              <div class="bento-sub">{{ t('settings.globalState') }}</div>
+        <div
+          class="settings-subtabs"
+          role="tablist"
+          :aria-label="t('settings.title')"
+        >
+          <button
+            v-for="tab in settingsTabs"
+            :key="tab.id"
+            class="settings-subtab"
+            :class="{ active: activeSettingsTab === tab.id }"
+            type="button"
+            role="tab"
+            :aria-selected="activeSettingsTab === tab.id"
+            @click="activeSettingsTab = tab.id"
+          >
+            <component :is="tab.icon" :size="16" />
+            <span>{{ tab.label }}</span>
+          </button>
+        </div>
+
+        <div class="bento-body settings-tab-panel">
+          <div
+            v-if="activeSettingsTab === 'execution'"
+            class="settings-stack"
+            role="tabpanel"
+          >
+            <div class="settings-control-row">
+              <div class="settings-inline-main">
+                <div class="bento-label">{{ t('settings.globalSwitch') }}</div>
+                <div class="bento-sub">{{ t('settings.globalState') }}</div>
+              </div>
+              <button
+                class="setting-switch"
+                :class="{ active: settings.aiExecution.enabled }"
+                type="button"
+                :aria-pressed="settings.aiExecution.enabled"
+                @click="update('aiExecution.enabled', !settings.aiExecution.enabled)"
+              >
+                {{
+                  settings.aiExecution.enabled
+                    ? t('settings.on')
+                    : t('settings.off')
+                }}
+              </button>
             </div>
-            <button
-              class="setting-switch"
-              :class="{ active: settings.aiExecution.enabled }"
-              type="button"
-              :aria-pressed="settings.aiExecution.enabled"
-              @click="update('aiExecution.enabled', !settings.aiExecution.enabled)"
-            >
-              {{
-                settings.aiExecution.enabled
-                  ? t('settings.on')
-                  : t('settings.off')
-              }}
-            </button>
+
+            <div class="settings-section">
+              <div class="settings-section-title">
+                <SlidersHorizontal :size="18" />
+                <span>{{ t('settings.safety.title') }}</span>
+              </div>
+              <div class="settings-number-grid">
+                <label class="settings-field">
+                  <span>{{ t('settings.safety.minRequests') }}</span>
+                  <input
+                    type="number"
+                    min="0"
+                    :value="settings.aiExecution.safety.minRequestsForActions"
+                    @input="
+                      update(
+                        'aiExecution.safety.minRequestsForActions',
+                        Number($event.target.value)
+                      )
+                    "
+                  />
+                </label>
+                <label class="settings-field">
+                  <span>{{ t('settings.safety.maxActions') }}</span>
+                  <input
+                    type="number"
+                    min="0"
+                    :value="settings.aiExecution.safety.maxActionsPerRun"
+                    @input="
+                      update(
+                        'aiExecution.safety.maxActionsPerRun',
+                        Number($event.target.value)
+                      )
+                    "
+                  />
+                </label>
+                <label class="settings-field">
+                  <span>{{ t('settings.safety.cooldown') }}</span>
+                  <input
+                    type="number"
+                    min="0"
+                    :value="settings.aiExecution.safety.channelCooldownMinutes"
+                    @input="
+                      update(
+                        'aiExecution.safety.channelCooldownMinutes',
+                        Number($event.target.value)
+                      )
+                    "
+                  />
+                </label>
+              </div>
+            </div>
+
+            <div class="settings-section">
+              <div class="settings-section-title">
+                <Activity :size="18" />
+                <span>{{ t('settings.permissions.title') }}</span>
+              </div>
+              <div class="bento-table-wrap">
+                <table class="settings-table">
+                  <thead>
+                    <tr>
+                      <th>{{ t('settings.permissions.action') }}</th>
+                      <th>{{ t('settings.permissions.allowed') }}</th>
+                      <th>{{ t('settings.permissions.strategy') }}</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr v-for="row in permissionRows" :key="row.key">
+                      <td>
+                        <div class="permission-name">
+                          <component :is="row.icon" :size="18" />
+                          <span>{{ row.title }}</span>
+                        </div>
+                      </td>
+                      <td>
+                        <button
+                          class="setting-switch small"
+                          :class="{ active: settingValue(`aiExecution.permissions.${row.key}`) }"
+                          type="button"
+                          :aria-pressed="settingValue(`aiExecution.permissions.${row.key}`)"
+                          @click="
+                            update(
+                              `aiExecution.permissions.${row.key}`,
+                              !settingValue(`aiExecution.permissions.${row.key}`)
+                            )
+                          "
+                        >
+                          {{
+                            settingValue(`aiExecution.permissions.${row.key}`)
+                              ? t('settings.on')
+                              : t('settings.off')
+                          }}
+                        </button>
+                      </td>
+                      <td>
+                        <CustomSelect
+                          :modelValue="settingValue(`aiExecution.confirmation.${row.key}`)"
+                          :options="confirmationOptions"
+                          @change="
+                            update(
+                              `aiExecution.confirmation.${row.key}`,
+                              $event
+                            )
+                          "
+                        />
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
           </div>
 
-          <div class="settings-section">
-            <div class="settings-section-title">
-              <SlidersHorizontal :size="18" />
-              <span>{{ t('settings.safety.title') }}</span>
-            </div>
-            <div class="settings-number-grid">
-              <label class="settings-field">
-                <span>{{ t('settings.safety.minRequests') }}</span>
-                <input
-                  type="number"
-                  min="0"
-                  :value="settings.aiExecution.safety.minRequestsForActions"
-                  @input="
-                    update(
-                      'aiExecution.safety.minRequestsForActions',
-                      Number($event.target.value)
-                    )
-                  "
-                />
-              </label>
-              <label class="settings-field">
-                <span>{{ t('settings.safety.maxActions') }}</span>
-                <input
-                  type="number"
-                  min="0"
-                  :value="settings.aiExecution.safety.maxActionsPerRun"
-                  @input="
-                    update(
-                      'aiExecution.safety.maxActionsPerRun',
-                      Number($event.target.value)
-                    )
-                  "
-                />
-              </label>
-              <label class="settings-field">
-                <span>{{ t('settings.safety.cooldown') }}</span>
-                <input
-                  type="number"
-                  min="0"
-                  :value="settings.aiExecution.safety.channelCooldownMinutes"
-                  @input="
-                    update(
-                      'aiExecution.safety.channelCooldownMinutes',
-                      Number($event.target.value)
-                    )
-                  "
-                />
-              </label>
-            </div>
-          </div>
-
-          <div class="settings-section">
-            <div class="settings-section-title">
-              <Activity :size="18" />
-              <span>{{ t('settings.permissions.title') }}</span>
-            </div>
+          <div
+            v-else-if="activeSettingsTab === 'prompt'"
+            class="settings-stack"
+            role="tabpanel"
+          >
             <div class="bento-table-wrap">
               <table class="settings-table">
                 <thead>
                   <tr>
-                    <th>{{ t('settings.permissions.action') }}</th>
-                    <th>{{ t('settings.permissions.allowed') }}</th>
-                    <th>{{ t('settings.permissions.strategy') }}</th>
+                    <th>{{ t('settings.prompt.part') }}</th>
+                    <th>{{ t('settings.prompt.include') }}</th>
                   </tr>
                 </thead>
                 <tbody>
-                  <tr v-for="row in permissionRows" :key="row.key">
+                  <tr v-for="row in promptRows" :key="row.key">
                     <td>
-                      <div class="permission-name">
+                      <div class="permission-name prompt-name">
                         <component :is="row.icon" :size="18" />
-                        <span>{{ row.title }}</span>
+                        <span>
+                          <strong>{{ row.title }}</strong>
+                          <small>{{ row.hint }}</small>
+                        </span>
                       </div>
                     </td>
                     <td>
                       <button
                         class="setting-switch small"
-                        :class="{ active: settingValue(`aiExecution.permissions.${row.key}`) }"
+                        :class="{ active: settingValue(`prompt.${row.key}`) }"
                         type="button"
-                        :aria-pressed="settingValue(`aiExecution.permissions.${row.key}`)"
+                        :aria-pressed="settingValue(`prompt.${row.key}`)"
                         @click="
                           update(
-                            `aiExecution.permissions.${row.key}`,
-                            !settingValue(`aiExecution.permissions.${row.key}`)
+                            `prompt.${row.key}`,
+                            !settingValue(`prompt.${row.key}`)
                           )
                         "
                       >
                         {{
-                          settingValue(`aiExecution.permissions.${row.key}`)
+                          settingValue(`prompt.${row.key}`)
                             ? t('settings.on')
                             : t('settings.off')
                         }}
                       </button>
                     </td>
-                    <td>
-                      <CustomSelect
-                        :modelValue="settingValue(`aiExecution.confirmation.${row.key}`)"
-                        :options="confirmationOptions"
-                        @change="
-                          update(
-                            `aiExecution.confirmation.${row.key}`,
-                            $event
-                          )
-                        "
-                      />
-                    </td>
                   </tr>
                 </tbody>
               </table>
             </div>
+
+            <label class="settings-field prompt-custom-field">
+              <span>{{ t('settings.prompt.customInstructions') }}</span>
+              <textarea
+                :placeholder="t('settings.prompt.customPlaceholder')"
+                :value="settings.prompt.customInstructions"
+                @input="update('prompt.customInstructions', $event.target.value)"
+              ></textarea>
+            </label>
           </div>
-        </div>
-      </article>
 
-      <article class="bento-item bento-full settings-prompt high-density">
-        <div class="bento-header">
-          <div class="bento-icon-wrapper">
-            <Brain :size="24" />
+          <div
+            v-else-if="activeSettingsTab === 'protected'"
+            class="settings-protected-grid"
+            role="tabpanel"
+          >
+            <label class="settings-field">
+              <span>{{ t('settings.protected.ids') }}</span>
+              <textarea
+                :value="listText('aiExecution.protectedChannels.ids')"
+                @input="
+                  updateList(
+                    'aiExecution.protectedChannels.ids',
+                    $event.target.value,
+                    'number'
+                  )
+                "
+              ></textarea>
+            </label>
+            <label class="settings-field">
+              <span>{{ t('settings.protected.groups') }}</span>
+              <textarea
+                :value="listText('aiExecution.protectedChannels.groups')"
+                @input="
+                  updateList(
+                    'aiExecution.protectedChannels.groups',
+                    $event.target.value
+                  )
+                "
+              ></textarea>
+            </label>
+            <label class="settings-field">
+              <span>{{ t('settings.protected.tags') }}</span>
+              <textarea
+                :value="listText('aiExecution.protectedChannels.tags')"
+                @input="
+                  updateList(
+                    'aiExecution.protectedChannels.tags',
+                    $event.target.value
+                  )
+                "
+              ></textarea>
+            </label>
+            <label class="settings-field">
+              <span>{{ t('settings.protected.names') }}</span>
+              <textarea
+                :value="listText('aiExecution.protectedChannels.nameIncludes')"
+                @input="
+                  updateList(
+                    'aiExecution.protectedChannels.nameIncludes',
+                    $event.target.value
+                  )
+                "
+              ></textarea>
+            </label>
+            <label class="settings-field">
+              <span>{{ t('settings.protected.models') }}</span>
+              <textarea
+                :value="listText('aiExecution.protectedChannels.modelIncludes')"
+                @input="
+                  updateList(
+                    'aiExecution.protectedChannels.modelIncludes',
+                    $event.target.value
+                  )
+                "
+              ></textarea>
+            </label>
+            <label class="settings-field">
+              <span>{{ t('settings.protected.types') }}</span>
+              <textarea
+                :value="listText('aiExecution.protectedChannels.types')"
+                @input="
+                  updateList(
+                    'aiExecution.protectedChannels.types',
+                    $event.target.value,
+                    'number'
+                  )
+                "
+              ></textarea>
+            </label>
           </div>
-          <h3>{{ t('settings.prompt.title') }}</h3>
-        </div>
-
-        <div class="settings-stack">
-        <div class="bento-table-wrap">
-          <table class="settings-table">
-            <thead>
-              <tr>
-                <th>{{ t('settings.prompt.part') }}</th>
-                <th>{{ t('settings.prompt.include') }}</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr v-for="row in promptRows" :key="row.key">
-                <td>
-                  <div class="permission-name prompt-name">
-                    <component :is="row.icon" :size="18" />
-                    <span>
-                      <strong>{{ row.title }}</strong>
-                      <small>{{ row.hint }}</small>
-                    </span>
-                  </div>
-                </td>
-                <td>
-                  <button
-                    class="setting-switch small"
-                    :class="{ active: settingValue(`prompt.${row.key}`) }"
-                    type="button"
-                    :aria-pressed="settingValue(`prompt.${row.key}`)"
-                    @click="
-                      update(
-                        `prompt.${row.key}`,
-                        !settingValue(`prompt.${row.key}`)
-                      )
-                    "
-                  >
-                    {{
-                      settingValue(`prompt.${row.key}`)
-                        ? t('settings.on')
-                        : t('settings.off')
-                    }}
-                  </button>
-                </td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-
-          <label class="settings-field prompt-custom-field">
-            <span>{{ t('settings.prompt.customInstructions') }}</span>
-            <textarea
-              :placeholder="t('settings.prompt.customPlaceholder')"
-              :value="settings.prompt.customInstructions"
-              @input="update('prompt.customInstructions', $event.target.value)"
-            ></textarea>
-          </label>
-        </div>
-      </article>
-
-      <article class="bento-item bento-full settings-protected high-density">
-        <div class="bento-header">
-          <h3>{{ t('settings.protected.title') }}</h3>
-        </div>
-        <div class="settings-protected-grid">
-          <label class="settings-field">
-            <span>{{ t('settings.protected.ids') }}</span>
-            <textarea
-              :value="listText('aiExecution.protectedChannels.ids')"
-              @input="
-                updateList(
-                  'aiExecution.protectedChannels.ids',
-                  $event.target.value,
-                  'number'
-                )
-              "
-            ></textarea>
-          </label>
-          <label class="settings-field">
-            <span>{{ t('settings.protected.groups') }}</span>
-            <textarea
-              :value="listText('aiExecution.protectedChannels.groups')"
-              @input="
-                updateList(
-                  'aiExecution.protectedChannels.groups',
-                  $event.target.value
-                )
-              "
-            ></textarea>
-          </label>
-          <label class="settings-field">
-            <span>{{ t('settings.protected.tags') }}</span>
-            <textarea
-              :value="listText('aiExecution.protectedChannels.tags')"
-              @input="
-                updateList(
-                  'aiExecution.protectedChannels.tags',
-                  $event.target.value
-                )
-              "
-            ></textarea>
-          </label>
-          <label class="settings-field">
-            <span>{{ t('settings.protected.names') }}</span>
-            <textarea
-              :value="listText('aiExecution.protectedChannels.nameIncludes')"
-              @input="
-                updateList(
-                  'aiExecution.protectedChannels.nameIncludes',
-                  $event.target.value
-                )
-              "
-            ></textarea>
-          </label>
-          <label class="settings-field">
-            <span>{{ t('settings.protected.models') }}</span>
-            <textarea
-              :value="listText('aiExecution.protectedChannels.modelIncludes')"
-              @input="
-                updateList(
-                  'aiExecution.protectedChannels.modelIncludes',
-                  $event.target.value
-                )
-              "
-            ></textarea>
-          </label>
-          <label class="settings-field">
-            <span>{{ t('settings.protected.types') }}</span>
-            <textarea
-              :value="listText('aiExecution.protectedChannels.types')"
-              @input="
-                updateList(
-                  'aiExecution.protectedChannels.types',
-                  $event.target.value,
-                  'number'
-                )
-              "
-            ></textarea>
-          </label>
         </div>
       </article>
     </template>
