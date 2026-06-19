@@ -1,10 +1,17 @@
 import { mkdir, readFile, writeFile } from 'node:fs/promises'
 import { dirname } from 'node:path'
+import type { AppConfig } from './config'
 
 export type ConfirmationStrategy = 'auto' | 'confirm' | 'never'
 
 export type OpsSettings = {
   version: 1
+  llm: {
+    baseUrl: string
+    model: string
+    temperature: number
+    apiKey?: string
+  }
   prompt: {
     includeChannelSummary: boolean
     includeErrors: boolean
@@ -45,10 +52,26 @@ export type OpsSettings = {
   }
 }
 
+export type PublicOpsSettings = Omit<OpsSettings, 'llm'> & {
+  llm: {
+    baseUrl: string
+    model: string
+    temperature: number
+    hasApiKey: boolean
+    apiKey: string
+    clearApiKey: boolean
+  }
+}
+
 const SETTINGS_PATH = process.env.AI_OPS_SETTINGS_PATH?.trim() || 'data/settings.json'
 
 const DEFAULT_SETTINGS: OpsSettings = {
   version: 1,
+  llm: {
+    baseUrl: '',
+    model: '',
+    temperature: 0.2,
+  },
   prompt: {
     includeChannelSummary: true,
     includeErrors: true,
@@ -124,6 +147,19 @@ function readNumber(
   return Math.min(max, Math.max(min, Math.round(value)))
 }
 
+function readFloat(
+  source: Record<string, unknown>,
+  key: string,
+  fallback: number,
+  min: number,
+  max: number
+) {
+  const raw = source[key]
+  const value = typeof raw === 'number' ? raw : Number(raw)
+  if (!Number.isFinite(value)) return fallback
+  return Math.min(max, Math.max(min, value))
+}
+
 function readStrategy(
   source: Record<string, unknown>,
   key: string,
@@ -144,6 +180,10 @@ function readText(
   const value = source[key]
   if (typeof value !== 'string') return fallback
   return value.trim().slice(0, maxLength)
+}
+
+function cleanUrl(value: string) {
+  return value.trim().replace(/\/+$/, '')
 }
 
 function readStringArray(
@@ -188,9 +228,13 @@ function readNumberArray(
   )]
 }
 
-export function normalizeOpsSettings(input: unknown): OpsSettings {
+export function normalizeOpsSettings(
+  input: unknown,
+  previous?: OpsSettings
+): OpsSettings {
   const defaults = cloneDefaultSettings()
   const root = isRecord(input) ? input : {}
+  const llm = readRecord(root, 'llm')
   const aiExecution = readRecord(root, 'aiExecution')
   const prompt = readRecord(root, 'prompt')
   const permissions = readRecord(aiExecution, 'permissions')
@@ -198,8 +242,29 @@ export function normalizeOpsSettings(input: unknown): OpsSettings {
   const safety = readRecord(aiExecution, 'safety')
   const protectedChannels = readRecord(aiExecution, 'protectedChannels')
 
+  const nextApiKey = readText(llm, 'apiKey', '', 20_000)
+  const clearApiKey = readBoolean(llm, 'clearApiKey', false)
+  const existingApiKey = previous?.llm.apiKey
+  const apiKey = clearApiKey
+    ? undefined
+    : nextApiKey
+      ? nextApiKey
+      : existingApiKey
+
   return {
     version: 1,
+    llm: {
+      baseUrl: cleanUrl(readText(llm, 'baseUrl', defaults.llm.baseUrl, 500)),
+      model: readText(llm, 'model', defaults.llm.model, 200),
+      temperature: readFloat(
+        llm,
+        'temperature',
+        defaults.llm.temperature,
+        0,
+        2
+      ),
+      ...(apiKey ? { apiKey } : {}),
+    },
     prompt: {
       includeChannelSummary: readBoolean(
         prompt,
@@ -352,6 +417,36 @@ export function normalizeOpsSettings(input: unknown): OpsSettings {
   }
 }
 
+function effectiveLlmSettings(
+  settings: OpsSettings,
+  config: AppConfig
+): AppConfig['llm'] {
+  return {
+    baseUrl: settings.llm.baseUrl || config.llm.baseUrl,
+    model: settings.llm.model || config.llm.model,
+    temperature: settings.llm.temperature,
+    apiKey: settings.llm.apiKey || config.llm.apiKey,
+  }
+}
+
+export function publicOpsSettings(
+  settings: OpsSettings,
+  config: AppConfig
+): PublicOpsSettings {
+  const effectiveLlm = effectiveLlmSettings(settings, config)
+  return {
+    ...settings,
+    llm: {
+      baseUrl: effectiveLlm.baseUrl,
+      model: effectiveLlm.model,
+      temperature: effectiveLlm.temperature,
+      hasApiKey: Boolean(effectiveLlm.apiKey),
+      apiKey: '',
+      clearApiKey: false,
+    },
+  }
+}
+
 export async function loadOpsSettings() {
   try {
     const raw = await readFile(SETTINGS_PATH, 'utf8')
@@ -364,9 +459,22 @@ export async function loadOpsSettings() {
   }
 }
 
+export async function loadPublicOpsSettings(config: AppConfig) {
+  return publicOpsSettings(await loadOpsSettings(), config)
+}
+
+export async function loadEffectiveLlmConfig(config: AppConfig) {
+  return effectiveLlmSettings(await loadOpsSettings(), config)
+}
+
 export async function saveOpsSettings(input: unknown) {
-  const settings = normalizeOpsSettings(input)
+  const previous = await loadOpsSettings()
+  const settings = normalizeOpsSettings(input, previous)
   await mkdir(dirname(SETTINGS_PATH), { recursive: true })
   await writeFile(SETTINGS_PATH, `${JSON.stringify(settings, null, 2)}\n`)
   return settings
+}
+
+export async function savePublicOpsSettings(input: unknown, config: AppConfig) {
+  return publicOpsSettings(await saveOpsSettings(input), config)
 }

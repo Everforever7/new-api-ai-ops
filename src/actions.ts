@@ -18,6 +18,7 @@ export type OpsAction = {
   id: string
   action: string
   rawAction: string
+  source?: 'report' | 'assistant'
   target?: string
   channelId?: number
   risk: 'low' | 'medium' | 'high'
@@ -32,7 +33,7 @@ export type OpsAction = {
   executedAt?: string
 }
 
-type RawAction = {
+export type RawAction = {
   action?: unknown
   target?: unknown
   risk?: unknown
@@ -50,6 +51,7 @@ type RawAction = {
 
 const AUDIT_PATH = process.env.AI_OPS_ACTION_AUDIT_PATH?.trim() || 'data/action-audit.jsonl'
 const CHANNEL_STATUS_AUTO_DISABLED = 2
+const REDACTED_VALUE = '[REDACTED]'
 const CREATE_CHANNEL_FIELDS = new Set([
   'name',
   'type',
@@ -68,6 +70,14 @@ const CREATE_CHANNEL_FIELDS = new Set([
   'remark',
 ])
 const CREATE_CHANNEL_MODES = new Set(['single', 'batch', 'multi_to_single'])
+const KNOWN_ACTIONS = new Set([
+  'test_channel',
+  'notify_low_balance',
+  'create_channel',
+  'update_channel',
+  'disable_channel',
+  'delete_channel',
+])
 
 function now() {
   return new Date().toISOString()
@@ -83,6 +93,57 @@ function normalizeRisk(value: unknown): OpsAction['risk'] {
     : 'low'
 }
 
+function redactSensitiveText(value: string) {
+  return value
+    .replace(/\bBearer\s+[A-Za-z0-9._~+/=-]+/gi, `Bearer ${REDACTED_VALUE}`)
+    .replace(/\b(?:sk|rk|pk)-[A-Za-z0-9][A-Za-z0-9._-]{12,}\b/g, REDACTED_VALUE)
+    .replace(
+      /\b[A-Za-z0-9_-]{16,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\b/g,
+      REDACTED_VALUE
+    )
+}
+
+function isSensitiveField(key: string) {
+  const normalized = key.trim().toLowerCase().replace(/[\s-]+/g, '_')
+  return [
+    'key',
+    'api_key',
+    'apikey',
+    'authorization',
+    'cookie',
+    'password',
+    'secret',
+    'token',
+    'access_token',
+    'refresh_token',
+  ].includes(normalized)
+}
+
+function redactSensitiveValue(value: unknown, fieldName?: string): unknown {
+  if (fieldName && isSensitiveField(fieldName)) {
+    return REDACTED_VALUE
+  }
+
+  if (typeof value === 'string') {
+    return redactSensitiveText(value)
+  }
+
+  if (Array.isArray(value)) {
+    return value.map((item) => redactSensitiveValue(item))
+  }
+
+  if (isRecord(value)) {
+    return Object.fromEntries(
+      Object.entries(value).map(([key, item]) => [
+        key,
+        redactSensitiveValue(item, key),
+      ])
+    )
+  }
+
+  return value
+}
+
 function normalizeActionName(value: unknown) {
   const action = String(value || '').trim().toLowerCase()
   const normalized = action.replace(/[\s-]+/g, '_')
@@ -91,6 +152,7 @@ function normalizeActionName(value: unknown) {
     [
       'inspect_channel_errors',
       'test_channel',
+      'test_channel_model',
       'check_channel',
       'channel_test',
       'test_channel_connectivity',
@@ -115,6 +177,9 @@ function normalizeActionName(value: unknown) {
       'adjust_channel_priority',
       'update_channel_group',
       'update_channel_models',
+      'update_channel_note',
+      'update_note',
+      'remark_channel',
     ].includes(normalized)
   ) {
     return 'update_channel'
@@ -165,6 +230,37 @@ function readRawActions(value: unknown): RawAction[] {
   return []
 }
 
+export function createOpsAction(
+  raw: RawAction,
+  index = 0,
+  source: OpsAction['source'] = 'report'
+): OpsAction {
+  const action = normalizeActionName(raw.action)
+  const target = raw.target === undefined ? undefined : String(raw.target)
+  const channelId =
+    parseChannelId(raw.channel_id) ??
+    parseChannelId(raw.channelId) ??
+    parseChannelId(target)
+  const createdAt = now()
+
+  return {
+    id: `${Date.now()}-${index}-${Math.random().toString(36).slice(2)}`,
+    action,
+    rawAction: String(raw.action || ''),
+    source,
+    target,
+    channelId,
+    risk: normalizeRisk(raw.risk),
+    requiresConfirm:
+      raw.requires_confirm === true || raw.requiresConfirm === true,
+    reason: String(raw.reason || 'AI proposed action'),
+    payload: rawPayload(raw),
+    status: 'queued',
+    createdAt,
+    updatedAt: createdAt,
+  }
+}
+
 export function parseReportActions(report: string): OpsAction[] {
   const candidates = extractJsonBlocks(report)
   if (!candidates.length) return []
@@ -178,31 +274,7 @@ export function parseReportActions(report: string): OpsAction[] {
     }
   }
 
-  return parsed.map((raw, index) => {
-    const action = normalizeActionName(raw.action)
-    const target = raw.target === undefined ? undefined : String(raw.target)
-    const channelId =
-      parseChannelId(raw.channel_id) ??
-      parseChannelId(raw.channelId) ??
-      parseChannelId(target)
-    const createdAt = now()
-
-    return {
-      id: `${Date.now()}-${index}-${Math.random().toString(36).slice(2)}`,
-      action,
-      rawAction: String(raw.action || ''),
-      target,
-      channelId,
-      risk: normalizeRisk(raw.risk),
-      requiresConfirm:
-        raw.requires_confirm === true || raw.requiresConfirm === true,
-      reason: String(raw.reason || 'AI proposed action'),
-      payload: rawPayload(raw),
-      status: 'queued',
-      createdAt,
-      updatedAt: createdAt,
-    }
-  })
+  return parsed.map((raw, index) => createOpsAction(raw, index, 'report'))
 }
 
 function permissionKey(action: string): keyof OpsSettings['aiExecution']['permissions'] | undefined {
@@ -342,7 +414,7 @@ function payloadRequirementReason(action: OpsAction) {
 
 async function appendAudit(action: OpsAction) {
   await mkdir(dirname(AUDIT_PATH), { recursive: true })
-  await appendFile(AUDIT_PATH, `${JSON.stringify(action)}\n`)
+  await appendFile(AUDIT_PATH, `${JSON.stringify(sanitizeActionForClient(action))}\n`)
 }
 
 async function coolingDown(action: OpsAction, settings: OpsSettings) {
@@ -388,6 +460,10 @@ function updateAction(
   }
 }
 
+export function sanitizeActionForClient(action: OpsAction): OpsAction {
+  return redactSensitiveValue(action) as OpsAction
+}
+
 async function evaluateAction(
   action: OpsAction,
   settings: OpsSettings,
@@ -401,15 +477,7 @@ async function evaluateAction(
     })
   }
 
-  const knownActions = new Set([
-    'test_channel',
-    'notify_low_balance',
-    'create_channel',
-    'update_channel',
-    'disable_channel',
-    'delete_channel',
-  ])
-  if (!knownActions.has(action.action)) {
+  if (!KNOWN_ACTIONS.has(action.action)) {
     return updateAction(action, {
       status: 'blocked',
       statusReason: `unsupported action: ${action.rawAction || action.action}`,
@@ -680,6 +748,33 @@ export async function buildActionQueue(
   return results
 }
 
+export async function buildAssistantActionDrafts(
+  config: AppConfig,
+  rawActions: RawAction[]
+) {
+  const settings = await loadOpsSettings()
+  const client = new NewApiClient(config.newApi)
+  const drafts: OpsAction[] = []
+
+  for (const [index, raw] of rawActions.entries()) {
+    const action = createOpsAction(raw, index, 'assistant')
+    const checked = await evaluateManualAction(action, settings, client)
+
+    if (checked.status === 'blocked') {
+      drafts.push(checked)
+      continue
+    }
+
+    drafts.push(updateAction(checked, {
+      status: 'pending_confirmation',
+      requiresConfirm: true,
+      statusReason: 'waiting for manual confirmation',
+    }))
+  }
+
+  return drafts
+}
+
 export async function executeActionNow(config: AppConfig, action: OpsAction) {
   const executing = updateAction(action, { status: 'executing' })
   try {
@@ -734,6 +829,13 @@ async function evaluateManualAction(
     })
   }
 
+  if (!KNOWN_ACTIONS.has(action.action)) {
+    return updateAction(action, {
+      status: 'blocked',
+      statusReason: `unsupported action: ${action.rawAction || action.action}`,
+    })
+  }
+
   const permission = permissionKey(action.action)
   if (permission && !settings.aiExecution.permissions[permission]) {
     return updateAction(action, {
@@ -747,6 +849,24 @@ async function evaluateManualAction(
     return updateAction(action, {
       status: 'blocked',
       statusReason: `${action.action} is never allowed`,
+    })
+  }
+
+  if (
+    ['test_channel', 'update_channel', 'disable_channel', 'delete_channel'].includes(action.action) &&
+    !action.channelId
+  ) {
+    return updateAction(action, {
+      status: 'blocked',
+      statusReason: `${action.action} requires channel id`,
+    })
+  }
+
+  const payloadReason = payloadRequirementReason(action)
+  if (payloadReason) {
+    return updateAction(action, {
+      status: 'blocked',
+      statusReason: payloadReason,
     })
   }
 

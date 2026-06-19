@@ -5,7 +5,11 @@ import type { Channel } from '../types/domain'
 import { NewApiClient } from '../newapi/client'
 import { OpsRuntime } from '../runtime'
 import { logger } from '../logger'
-import { loadOpsSettings, saveOpsSettings } from '../settings'
+import {
+  loadEffectiveLlmConfig,
+  loadPublicOpsSettings,
+  savePublicOpsSettings,
+} from '../settings'
 
 type JsonValue = Record<string, unknown> | unknown[]
 
@@ -146,6 +150,68 @@ function sanitizeChannel(channel: Channel) {
   }
 }
 
+function cleanUrl(value: string) {
+  return value.trim().replace(/\/+$/, '')
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === 'object' && !Array.isArray(value)
+}
+
+function readModelId(value: unknown) {
+  if (typeof value === 'string') return value.trim()
+  if (!isRecord(value)) return ''
+  const id = value.id ?? value.model ?? value.name
+  return typeof id === 'string' ? id.trim() : ''
+}
+
+async function fetchLlmModels(config: AppConfig, input: unknown) {
+  const effective = await loadEffectiveLlmConfig(config)
+  const llm = isRecord(input) ? isRecord(input.llm) ? input.llm : input : {}
+  const baseUrl =
+    typeof llm.baseUrl === 'string' && llm.baseUrl.trim()
+      ? cleanUrl(llm.baseUrl)
+      : effective.baseUrl
+  const apiKey =
+    llm.clearApiKey === true
+      ? undefined
+      : typeof llm.apiKey === 'string' && llm.apiKey.trim()
+        ? llm.apiKey.trim()
+        : effective.apiKey
+
+  if (!baseUrl) {
+    throw new Error('LLM base URL is required')
+  }
+
+  const headers: Record<string, string> = {
+    Accept: 'application/json',
+  }
+  if (apiKey) headers.Authorization = `Bearer ${apiKey}`
+
+  const response = await fetch(`${baseUrl}/models`, { headers })
+  const text = await response.text()
+  if (!response.ok) {
+    throw new Error(
+      `LLM models ${response.status} ${response.statusText}: ${text.slice(0, 300)}`
+    )
+  }
+
+  const payload = text ? JSON.parse(text) as unknown : {}
+  const source = Array.isArray(payload)
+    ? payload
+    : isRecord(payload) && Array.isArray(payload.data)
+      ? payload.data
+      : isRecord(payload) && Array.isArray(payload.models)
+        ? payload.models
+        : []
+  const models = [...new Set(source.map(readModelId).filter(Boolean))].sort()
+
+  return {
+    models,
+    count: models.length,
+  }
+}
+
 async function handleApi(
   req: Request,
   url: URL,
@@ -154,12 +220,14 @@ async function handleApi(
 ) {
   try {
     if (url.pathname === '/api/status' && req.method === 'GET') {
+      const llmConfig = await loadEffectiveLlmConfig(config)
       return json({
         ...runtime.getState(),
         config: {
           newApiBaseUrl: config.newApi.baseUrl,
-          llmBaseUrl: config.llm.baseUrl,
-          llmModel: config.llm.model,
+          llmBaseUrl: llmConfig.baseUrl,
+          llmModel: llmConfig.model,
+          hasLlmApiKey: Boolean(llmConfig.apiKey),
           hasDiscordWebhook: Boolean(config.discord.webhookUrl),
           reportIntervalMinutes: config.report.intervalMinutes,
         },
@@ -183,18 +251,41 @@ async function handleApi(
     }
 
     if (url.pathname === '/api/settings' && req.method === 'GET') {
-      return json(await loadOpsSettings())
+      return json(await loadPublicOpsSettings(config))
     }
 
     if (url.pathname === '/api/settings' && req.method === 'PUT') {
       const body = await req.json().catch(() => {
         throw new Error('invalid settings JSON')
       })
-      return json(await saveOpsSettings(body))
+      return json(await savePublicOpsSettings(body, config))
+    }
+
+    if (url.pathname === '/api/llm/models' && req.method === 'POST') {
+      const body = await req.json().catch(() => ({}))
+      return json(await fetchLlmModels(config, body))
     }
 
     if (url.pathname === '/api/actions' && req.method === 'GET') {
       return json(runtime.getActions())
+    }
+
+    if (url.pathname === '/api/assistant/session' && req.method === 'GET') {
+      return json(runtime.getAssistantSession())
+    }
+
+    if (url.pathname === '/api/assistant/reset' && req.method === 'POST') {
+      return json(runtime.resetAssistantSession())
+    }
+
+    if (url.pathname === '/api/assistant/message' && req.method === 'POST') {
+      const body = await req.json().catch(() => {
+        throw new Error('invalid assistant message JSON')
+      })
+      if (!body || typeof body !== 'object' || typeof body.message !== 'string') {
+        throw new Error('assistant message is required')
+      }
+      return json(await runtime.sendAssistantMessage(body.message))
     }
 
     const actionMatch = url.pathname.match(/^\/api\/actions\/([^/]+)\/(execute|reject)$/)

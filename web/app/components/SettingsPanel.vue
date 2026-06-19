@@ -6,6 +6,7 @@ import {
   Brain,
   Edit3,
   Gauge,
+  KeyRound,
   ListChecks,
   Lock,
   PlusCircle,
@@ -26,10 +27,17 @@ const props = defineProps({
   loading: { type: Boolean, default: false },
   saving: { type: Boolean, default: false },
   savedAt: { type: String, default: '' },
+  llmModels: { type: Array, default: () => [] },
+  llmModelsLoading: { type: Boolean, default: false },
   t: { type: Function, required: true },
 })
 
-const emit = defineEmits(['updateSetting', 'saveSettings', 'reloadSettings'])
+const emit = defineEmits([
+  'updateSetting',
+  'saveSettings',
+  'reloadSettings',
+  'fetchLlmModels',
+])
 const activeSettingsTab = ref('execution')
 
 const permissionRows = computed(() => [
@@ -99,6 +107,16 @@ const confirmationOptions = computed(() => [
   { value: 'never', label: props.t('settings.confirmation.never') },
 ])
 
+const llmModelOptions = computed(() => {
+  const current = props.settings?.llm?.model
+  return [
+    ...new Set([
+      ...(current ? [current] : []),
+      ...props.llmModels.map(String),
+    ]),
+  ].filter(Boolean)
+})
+
 const settingsTabs = computed(() => [
   {
     id: 'execution',
@@ -109,6 +127,11 @@ const settingsTabs = computed(() => [
     id: 'prompt',
     icon: Brain,
     label: props.t('settings.prompt.title'),
+  },
+  {
+    id: 'llm',
+    icon: KeyRound,
+    label: props.t('settings.llm.title'),
   },
   {
     id: 'protected',
@@ -123,6 +146,17 @@ function settingValue(path) {
 
 function update(path, value) {
   emit('updateSetting', path, value)
+}
+
+function updateApiKey(value) {
+  update('llm.apiKey', value)
+  if (value) update('llm.clearApiKey', false)
+}
+
+function toggleClearApiKey() {
+  const next = !settingValue('llm.clearApiKey')
+  update('llm.clearApiKey', next)
+  if (next) update('llm.apiKey', '')
 }
 
 function listText(path) {
@@ -431,6 +465,122 @@ function logout() {
                 @input="update('prompt.customInstructions', $event.target.value)"
               ></textarea>
             </label>
+          </div>
+
+          <div
+            v-else-if="activeSettingsTab === 'llm'"
+            class="settings-stack"
+            role="tabpanel"
+          >
+            <div class="settings-section">
+              <div class="settings-section-title">
+                <Brain :size="18" />
+                <span>{{ t('settings.llm.connectionTitle') }}</span>
+              </div>
+              <div class="settings-llm-grid">
+                <label class="settings-field">
+                  <span>{{ t('settings.llm.baseUrl') }}</span>
+                  <input
+                    type="url"
+                    autocomplete="off"
+                    :placeholder="t('settings.llm.baseUrlPlaceholder')"
+                    :value="settings.llm.baseUrl"
+                    @input="update('llm.baseUrl', $event.target.value)"
+                  />
+                </label>
+                <label class="settings-field">
+                  <span>{{ t('settings.llm.model') }}</span>
+                  <div class="settings-model-row">
+                    <input
+                      type="text"
+                      autocomplete="off"
+                      list="llm-model-options"
+                      :placeholder="t('settings.llm.modelPlaceholder')"
+                      :value="settings.llm.model"
+                      @input="update('llm.model', $event.target.value)"
+                    />
+                    <button
+                      class="bento-btn icon-btn"
+                      type="button"
+                      :disabled="llmModelsLoading"
+                      :aria-label="t('settings.llm.fetchModels')"
+                      :title="t('settings.llm.fetchModels')"
+                      @click="emit('fetchLlmModels')"
+                    >
+                      <RefreshCw :size="18" />
+                    </button>
+                  </div>
+                  <datalist id="llm-model-options">
+                    <option
+                      v-for="model in llmModelOptions"
+                      :key="model"
+                      :value="model"
+                    />
+                  </datalist>
+                  <small>
+                    {{
+                      llmModelsLoading
+                        ? t('settings.llm.fetchingModels')
+                        : llmModelOptions.length
+                          ? t('settings.llm.modelsLoaded', { count: llmModelOptions.length })
+                          : t('settings.llm.modelHint')
+                    }}
+                  </small>
+                </label>
+              </div>
+            </div>
+
+            <div class="settings-section">
+              <div class="settings-section-title">
+                <KeyRound :size="18" />
+                <span>{{ t('settings.llm.apiKeyTitle') }}</span>
+              </div>
+
+              <div
+                class="status-pill compact"
+                :class="settings.llm.hasApiKey && !settings.llm.clearApiKey ? 'ok' : 'warn'"
+              >
+                <span class="status-dot"></span>
+                {{
+                  settings.llm.hasApiKey && !settings.llm.clearApiKey
+                    ? t('settings.llm.configured')
+                    : t('settings.llm.notConfigured')
+                }}
+              </div>
+
+              <div class="settings-key-row">
+                <label class="settings-field settings-key-field">
+                  <span>{{ t('settings.llm.apiKey') }}</span>
+                  <input
+                    type="password"
+                    autocomplete="new-password"
+                    :placeholder="
+                      settings.llm.hasApiKey
+                        ? t('settings.llm.apiKeyKeepPlaceholder')
+                        : t('settings.llm.apiKeyPlaceholder')
+                    "
+                    :value="settings.llm.apiKey"
+                    :disabled="settings.llm.clearApiKey"
+                    @input="updateApiKey($event.target.value)"
+                  />
+                  <small>{{ t('settings.llm.apiKeyHint') }}</small>
+                </label>
+
+                <button
+                  class="setting-switch settings-clear-key"
+                  :class="{ active: settings.llm.clearApiKey }"
+                  type="button"
+                  :aria-pressed="settings.llm.clearApiKey"
+                  @click="toggleClearApiKey"
+                >
+                  {{
+                    settings.llm.clearApiKey
+                      ? t('settings.llm.clearEnabled')
+                      : t('settings.llm.clearKey')
+                  }}
+                </button>
+              </div>
+            </div>
           </div>
 
           <div

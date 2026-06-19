@@ -4,6 +4,7 @@ import {
   Layers3,
   LayoutDashboard,
   FileText,
+  MessageCircle,
   Radio,
   Settings2,
   Bot,
@@ -11,6 +12,8 @@ import {
 import {
   clearStoredAuth,
   executeAction as requestExecuteAction,
+  fetchLlmModels as requestFetchLlmModels,
+  getAssistantSession,
   getChannels,
   getActions,
   getSettings,
@@ -19,12 +22,15 @@ import {
   getStatus,
   runCheck as requestRunCheck,
   saveSettings as requestSaveSettings,
+  resetAssistantSession as requestResetAssistantSession,
+  sendAssistantMessage as requestSendAssistantMessage,
 } from './api.js'
 import { LANGUAGES, resolveLocale, translate } from './i18n.js'
 
 // Import Sub-components
 import LoginPanel from './components/LoginPanel.vue'
 import FloatingDock from './components/FloatingDock.vue'
+import AssistantPanel from './components/AssistantPanel.vue'
 import BentoDashboard from './components/BentoDashboard.vue'
 import ReportPanel from './components/ReportPanel.vue'
 import ChannelsTable from './components/ChannelsTable.vue'
@@ -55,9 +61,16 @@ const settingsSaving = ref(false)
 const settingsSavedAt = ref('')
 const actionsLoading = ref(false)
 const executingActionIds = ref([])
+const assistantSession = ref(null)
+const assistantLoading = ref(false)
+const assistantSending = ref(false)
+const assistantResetting = ref(false)
+const llmModels = ref([])
+const llmModelsLoading = ref(false)
 
 const tabs = computed(() => [
   { id: 'dashboard', label: t('tabs.dashboard'), icon: LayoutDashboard },
+  { id: 'assistant', label: t('tabs.assistant'), icon: MessageCircle },
   { id: 'report', label: t('tabs.report'), icon: FileText },
   { id: 'channels', label: t('tabs.channels'), icon: Radio },
   { id: 'actions', label: t('tabs.actions'), icon: Bot },
@@ -126,6 +139,9 @@ watch(
 )
 
 watch(activeTab, (nextTab) => {
+  if (nextTab === 'assistant') {
+    loadAssistantSession()
+  }
   if (nextTab === 'actions') {
     loadActions()
   }
@@ -315,6 +331,54 @@ async function loadActions() {
   }
 }
 
+async function loadAssistantSession() {
+  assistantLoading.value = true
+  try {
+    assistantSession.value = await getAssistantSession()
+  } catch (error) {
+    notifyError('errors.assistantLoadFailed', error)
+  } finally {
+    assistantLoading.value = false
+  }
+}
+
+async function sendAssistantMessage(message) {
+  assistantSending.value = true
+  try {
+    assistantSession.value = await requestSendAssistantMessage(message)
+    await loadActions()
+  } catch (error) {
+    notifyError('errors.assistantSendFailed', error)
+  } finally {
+    assistantSending.value = false
+  }
+}
+
+async function resetAssistantSession() {
+  assistantResetting.value = true
+  try {
+    assistantSession.value = await requestResetAssistantSession()
+  } catch (error) {
+    notifyError('errors.assistantResetFailed', error)
+  } finally {
+    assistantResetting.value = false
+  }
+}
+
+async function fetchLlmModels() {
+  if (!settings.value?.llm) return
+
+  llmModelsLoading.value = true
+  try {
+    const result = await requestFetchLlmModels(settings.value.llm)
+    llmModels.value = Array.isArray(result.models) ? result.models : []
+  } catch (error) {
+    notifyError('errors.llmModelsLoadFailed', error)
+  } finally {
+    llmModelsLoading.value = false
+  }
+}
+
 async function executeAction(actionId) {
   executingActionIds.value = [...new Set([...executingActionIds.value, actionId])]
   try {
@@ -390,6 +454,12 @@ function resetAuthenticatedState() {
   settingsSaving.value = false
   actionsLoading.value = false
   executingActionIds.value = []
+  assistantSession.value = null
+  assistantLoading.value = false
+  assistantSending.value = false
+  assistantResetting.value = false
+  llmModels.value = []
+  llmModelsLoading.value = false
 }
 
 function handleUnauthorized() {
@@ -443,6 +513,19 @@ onBeforeUnmount(() => {
           @runManualCheck="runManualCheck"
         />
 
+        <AssistantPanel
+          v-else-if="activeTab === 'assistant'"
+          key="assistant"
+          :session="assistantSession"
+          :loading="assistantLoading"
+          :sending="assistantSending"
+          :resetting="assistantResetting"
+          :t="t"
+          @sendMessage="sendAssistantMessage"
+          @resetSession="resetAssistantSession"
+          @openActions="activeTab = 'actions'"
+        />
+
         <ReportPanel 
           v-else-if="activeTab === 'report'" 
           key="report"
@@ -478,10 +561,13 @@ onBeforeUnmount(() => {
           :loading="settingsLoading"
           :saving="settingsSaving"
           :savedAt="settingsSavedAt"
+          :llmModels="llmModels"
+          :llmModelsLoading="llmModelsLoading"
           :t="t"
           @updateSetting="updateSetting"
           @saveSettings="saveSettings"
           @reloadSettings="loadSettings"
+          @fetchLlmModels="fetchLlmModels"
         />
 
       </Transition>

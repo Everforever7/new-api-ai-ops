@@ -1,6 +1,6 @@
 import type { AppConfig } from '../config'
 import type { HealthSnapshot } from '../types/domain'
-import { loadOpsSettings } from '../settings'
+import { loadEffectiveLlmConfig, loadOpsSettings } from '../settings'
 import { buildOpsPrompt, buildRuleBasedReport } from './prompts'
 
 type ChatMessage = {
@@ -21,6 +21,7 @@ export async function generateOpsReport(
   snapshot: HealthSnapshot
 ) {
   const settings = await loadOpsSettings()
+  const llm = await loadEffectiveLlmConfig(config)
   const promptOptions = {
     includeChannelSummary: settings.prompt.includeChannelSummary,
     includeErrors: settings.prompt.includeErrors,
@@ -30,20 +31,20 @@ export async function generateOpsReport(
     customInstructions: settings.prompt.customInstructions,
   }
 
-  if (!config.llm.apiKey) {
+  if (!llm.apiKey) {
     return buildRuleBasedReport(snapshot, promptOptions)
   }
 
-  const response = await fetch(`${config.llm.baseUrl}/chat/completions`, {
+  const response = await fetch(`${llm.baseUrl}/chat/completions`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      Authorization: `Bearer ${config.llm.apiKey}`,
+      Authorization: `Bearer ${llm.apiKey}`,
     },
     body: JSON.stringify({
-      model: config.llm.model,
+      model: llm.model,
       messages: buildOpsPrompt(snapshot, promptOptions) satisfies ChatMessage[],
-      temperature: config.llm.temperature,
+      temperature: llm.temperature,
     }),
   })
 

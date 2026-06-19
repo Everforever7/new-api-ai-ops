@@ -136,3 +136,28 @@ export function rejectAction(actionId) {
     body: '{}',
   })
 }
+
+export function getAssistantSession() {
+  return api('/api/assistant/session')
+}
+
+export function resetAssistantSession() {
+  return api('/api/assistant/reset', {
+    method: 'POST',
+    body: '{}',
+  })
+}
+
+export function sendAssistantMessage(message) {
+  return api('/api/assistant/message', {
+    method: 'POST',
+    body: JSON.stringify({ message }),
+  })
+}
+
+export function fetchLlmModels(llm) {
+  return api('/api/llm/models', {
+    method: 'POST',
+    body: JSON.stringify({ llm }),
+  })
+}
