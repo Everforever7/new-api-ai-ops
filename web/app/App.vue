@@ -1,22 +1,19 @@
 <script setup>
 import { computed, onMounted, ref, watch } from 'vue'
 import {
-  AlertCircle,
-  Languages,
   Layers3,
-  Moon,
-  PlayCircle,
-  RefreshCw,
-  Sun,
   LayoutDashboard,
   FileText,
   Radio,
-  ServerCrash,
-  BatteryWarning,
-  Activity
 } from 'lucide-vue-next'
 import { getChannels, getStatus, runCheck as requestRunCheck } from './api.js'
 import { LANGUAGES, resolveLocale, translate } from './i18n.js'
+
+// Import Sub-components
+import FloatingDock from './components/FloatingDock.vue'
+import BentoDashboard from './components/BentoDashboard.vue'
+import ReportPanel from './components/ReportPanel.vue'
+import ChannelsTable from './components/ChannelsTable.vue'
 
 const STORAGE_KEYS = {
   locale: 'new-api-ai-ops:locale',
@@ -116,8 +113,7 @@ function readStoredValue(key) {
 function writeStoredValue(key, value) {
   try {
     localStorage.setItem(key, value)
-  } catch {
-  }
+  } catch {}
 }
 
 function resolveTheme(value) {
@@ -144,11 +140,11 @@ function toggleTheme() {
   theme.value = theme.value === 'dark' ? 'light' : 'dark'
 }
 
+// FORMATTING HELPERS (passed as props)
 function formatDate(value) {
   if (!value) return t('common.emptyValue')
   const date = new Date(value)
   if (Number.isNaN(date.getTime())) return t('common.emptyValue')
-
   return new Intl.DateTimeFormat(locale.value, {
     year: 'numeric', month: '2-digit', day: '2-digit',
     hour: '2-digit', minute: '2-digit', second: '2-digit',
@@ -180,19 +176,7 @@ function formatLatency(value) {
     : t('common.emptyValue')
 }
 
-function formatChannelStatus(channel) {
-  if (channel.status === 1) return t('channelStatus.enabled')
-  if (channel.status === 2) return t('channelStatus.autoDisabled')
-  if (channel.status === 0) return t('channelStatus.disabled')
-  return channel.statusLabel || t('channelStatus.unknown')
-}
-
-function channelStatusClass(channel) {
-  if (channel.status === 1) return 'ok'
-  if (channel.status === 2) return 'warn'
-  return 'danger'
-}
-
+// API ACTIONS
 async function refreshAll() {
   refreshing.value = true
   uiError.value = ''
@@ -230,7 +214,6 @@ onMounted(() => {
 <template>
   <div class="bento-app">
     
-    <!-- Top Floating Logo (Optional but gives it a brand presence without a full header) -->
     <header class="floating-brand">
       <div class="brand-mark"><Layers3 :size="24" /></div>
       <h1>{{ t('app.title') }}</h1>
@@ -239,171 +222,53 @@ onMounted(() => {
     <main class="bento-container">
       <Transition name="scale-fade" mode="out-in">
         
-        <!-- DASHBOARD BENTO GRID -->
-        <div v-if="activeTab === 'dashboard'" class="bento-grid" key="dashboard">
-          
-          <!-- Hero Panel (Wide & Tall) -->
-          <article class="bento-item bento-hero">
-            <div class="hero-content">
-              <h2>{{ currentTabName }}</h2>
-              <div class="status-pill" :class="runState.className">
-                <div class="status-dot"></div>
-                {{ runState.label }}
-              </div>
-            </div>
-            
-            <div class="hero-actions">
-              <div class="last-run">{{ lastRunText }}</div>
-              <div v-if="latestError" class="error-text">
-                <AlertCircle :size="14" />
-                <span>{{ latestError }}</span>
-              </div>
-              <div class="buttons">
-                <button class="bento-btn" type="button" :disabled="refreshing" @click="refreshAll" :title="t('toolbar.refresh')">
-                  <RefreshCw :size="18" :class="{ spin: refreshing }" />
-                </button>
-                <button class="bento-btn primary" type="button" :disabled="runningCheck" @click="runManualCheck">
-                  <PlayCircle v-if="!runningCheck" :size="18" />
-                  <RefreshCw v-else :size="18" class="spin" />
-                  <span>{{ runningCheck ? t('toolbar.checking') : t('toolbar.runNow') }}</span>
-                </button>
-              </div>
-            </div>
-          </article>
+        <BentoDashboard 
+          v-if="activeTab === 'dashboard'" 
+          key="dashboard"
+          :snapshot="snapshot"
+          :currentTabName="currentTabName"
+          :runState="runState"
+          :lastRunText="lastRunText"
+          :latestError="latestError"
+          :refreshing="refreshing"
+          :runningCheck="runningCheck"
+          :slowestChannelText="slowestChannelText"
+          :t="t"
+          :formatNumber="formatNumber"
+          :formatPercent="formatPercent"
+          @refreshAll="refreshAll"
+          @runManualCheck="runManualCheck"
+        />
 
-          <!-- Metric: Channels (Square) -->
-          <article class="bento-item bento-square">
-            <div class="bento-icon-wrapper"><ServerCrash :size="24"/></div>
-            <div class="bento-data">
-              <div class="bento-val">{{ formatNumber(snapshot?.channels.total) }}</div>
-              <div class="bento-label">{{ t('dashboard.channelStatus') }}</div>
-              <div class="bento-sub">{{ t('dashboard.channelSummary', { enabled: formatNumber(snapshot?.channels.enabled), autoDisabled: formatNumber(snapshot?.channels.autoDisabled) }) }}</div>
-            </div>
-          </article>
+        <ReportPanel 
+          v-else-if="activeTab === 'report'" 
+          key="report"
+          :reportText="reportText"
+          :t="t"
+        />
 
-          <!-- Metric: Logs (Tall) -->
-          <article class="bento-item bento-tall">
-            <div class="bento-icon-wrapper"><FileText :size="24"/></div>
-            <div class="bento-data">
-              <div class="bento-val">{{ formatNumber(snapshot?.logs.total) }}</div>
-              <div class="bento-label">{{ t('dashboard.recentLogs') }}</div>
-              <div class="bento-sub">{{ t('dashboard.logSummary', { success: formatNumber(snapshot?.logs.success), errors: formatNumber(snapshot?.logs.errors) }) }}</div>
-            </div>
-          </article>
-
-          <!-- Metric: Failure Rate (Square) -->
-          <article class="bento-item bento-square">
-            <div class="bento-icon-wrapper"><Activity :size="24"/></div>
-            <div class="bento-data">
-              <div class="bento-val">{{ formatPercent(snapshot?.logs.failureRate) }}</div>
-              <div class="bento-label">{{ t('dashboard.failureRate') }}</div>
-              <div class="bento-sub">{{ t('dashboard.throughput', { rpm: formatNumber(snapshot?.logs.rpm), tpm: formatNumber(snapshot?.logs.tpm) }) }}</div>
-            </div>
-          </article>
-
-          <!-- Metric: Low Balance (Wide) -->
-          <article class="bento-item bento-wide bento-highlight">
-            <div class="bento-flex-row">
-              <div class="bento-icon-wrapper warn"><BatteryWarning :size="28"/></div>
-              <div class="bento-data flex-1">
-                <div class="bento-label">{{ t('dashboard.lowBalance') }}</div>
-                <div class="bento-val large">{{ formatNumber(snapshot?.channels.lowBalance?.length) }}</div>
-                <div class="bento-sub">{{ slowestChannelText }}</div>
-              </div>
-            </div>
-          </article>
-          
-        </div>
-
-        <!-- REPORT BENTO -->
-        <div v-else-if="activeTab === 'report'" class="bento-grid" key="report">
-          <article class="bento-item bento-full report-bento">
-             <div class="bento-header">
-                <h3>{{ t('report.title') }}</h3>
-             </div>
-             <div class="bento-body">
-               <pre class="minimal-pre">{{ reportText }}</pre>
-             </div>
-          </article>
-        </div>
-
-        <!-- CHANNELS BENTO -->
-        <div v-else-if="activeTab === 'channels'" class="bento-grid" key="channels">
-           <article class="bento-item bento-full table-bento">
-              <div class="bento-header">
-                <h3>{{ t('channels.title') }}</h3>
-              </div>
-              <div class="bento-body bento-table-wrap">
-                <table>
-                  <thead>
-                    <tr>
-                      <th>{{ t('channels.id') }}</th>
-                      <th>{{ t('channels.name') }}</th>
-                      <th>{{ t('channels.status') }}</th>
-                      <th>{{ t('channels.balance') }}</th>
-                      <th>{{ t('channels.latency') }}</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    <tr v-if="!visibleChannels.length">
-                      <td colspan="5" class="empty">{{ t('channels.empty') }}</td>
-                    </tr>
-                    <tr v-for="channel in visibleChannels" :key="channel.id">
-                      <td class="channel-id">{{ channel.id }}</td>
-                      <td>{{ channel.name }}</td>
-                      <td>
-                        <span class="status-pill compact" :class="channelStatusClass(channel)">
-                          <span class="status-dot"></span>
-                          {{ formatChannelStatus(channel) }}
-                        </span>
-                      </td>
-                      <td class="font-mono">{{ formatBalance(channel.balance) }}</td>
-                      <td class="font-mono">{{ formatLatency(channel.responseTimeMs) }}</td>
-                    </tr>
-                  </tbody>
-                </table>
-              </div>
-           </article>
-        </div>
+        <ChannelsTable 
+          v-else-if="activeTab === 'channels'" 
+          key="channels"
+          :visibleChannels="visibleChannels"
+          :t="t"
+          :formatBalance="formatBalance"
+          :formatLatency="formatLatency"
+        />
 
       </Transition>
     </main>
 
-    <!-- FLOATING DOCK -->
-    <nav class="floating-dock">
-      <div class="dock-container">
-        <!-- Main Nav -->
-        <div class="dock-group">
-          <button 
-            v-for="tab in tabs" 
-            :key="tab.id"
-            class="dock-item"
-            :class="{ active: activeTab === tab.id }"
-            @click="activeTab = tab.id"
-            :title="tab.label"
-          >
-            <component :is="tab.icon" :size="22" />
-            <span class="dock-tooltip">{{ tab.label }}</span>
-            <div v-if="activeTab === tab.id" class="dock-indicator"></div>
-          </button>
-        </div>
-
-        <div class="dock-divider"></div>
-
-        <!-- Preferences -->
-        <div class="dock-group">
-           <button class="dock-item" @click="cycleLocale" title="Switch Language">
-             <Languages :size="22" />
-             <span class="dock-tooltip">{{ locale.toUpperCase() }}</span>
-           </button>
-           <button class="dock-item" @click="toggleTheme" :title="themeToggleLabel">
-             <Sun v-if="theme === 'dark'" :size="22" />
-             <Moon v-else :size="22" />
-             <span class="dock-tooltip">{{ theme === 'dark' ? 'Light' : 'Dark' }}</span>
-           </button>
-        </div>
-      </div>
-    </nav>
+    <FloatingDock 
+      :tabs="tabs"
+      :activeTab="activeTab"
+      :locale="locale"
+      :theme="theme"
+      :themeToggleLabel="themeToggleLabel"
+      @update:activeTab="(id) => activeTab = id"
+      @cycleLocale="cycleLocale"
+      @toggleTheme="toggleTheme"
+    />
 
   </div>
 </template>
