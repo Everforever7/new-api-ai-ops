@@ -8,6 +8,12 @@ import {
   PlayCircle,
   RefreshCw,
   Sun,
+  LayoutDashboard,
+  FileText,
+  Radio,
+  Menu,
+  X,
+  ServerCrash
 } from 'lucide-vue-next'
 import { getChannels, getStatus, runCheck as requestRunCheck } from './api.js'
 import { LANGUAGES, resolveLocale, translate } from './i18n.js'
@@ -27,11 +33,12 @@ const channels = ref([])
 const uiError = ref('')
 const refreshing = ref(false)
 const runningCheck = ref(false)
+const mobileMenuOpen = ref(false)
 
 const tabs = computed(() => [
-  { id: 'dashboard', label: t('tabs.dashboard') },
-  { id: 'report', label: t('tabs.report') },
-  { id: 'channels', label: t('tabs.channels') },
+  { id: 'dashboard', label: t('tabs.dashboard'), icon: LayoutDashboard },
+  { id: 'report', label: t('tabs.report'), icon: FileText },
+  { id: 'channels', label: t('tabs.channels'), icon: Radio },
 ])
 
 const snapshot = computed(() => status.value?.lastSnapshot)
@@ -68,6 +75,10 @@ const runState = computed(() => {
   return { className: 'ok', label: t('status.ready') }
 })
 
+const currentTabName = computed(() => {
+  return tabs.value.find(t => t.id === activeTab.value)?.label || ''
+})
+
 watch(
   locale,
   (nextLocale) => {
@@ -91,6 +102,10 @@ watch(
   },
   { immediate: true }
 )
+
+watch(activeTab, () => {
+  mobileMenuOpen.value = false
+})
 
 function t(key, params) {
   return translate(locale.value, key, params)
@@ -234,30 +249,43 @@ onMounted(() => {
 </script>
 
 <template>
-  <header class="app-header">
-    <div class="shell topbar">
-      <div class="brand">
-        <div class="brand-mark" aria-hidden="true">
-          <Layers3 :size="22" />
+  <div class="app-layout">
+    <!-- Mobile overlay -->
+    <div 
+      class="mobile-overlay" 
+      v-show="mobileMenuOpen"
+      @click="mobileMenuOpen = false"
+    ></div>
+
+    <!-- Sidebar Navigation -->
+    <aside class="sidebar" :class="{ 'sidebar-open': mobileMenuOpen }">
+      <div class="sidebar-header">
+        <div class="brand">
+          <div class="brand-mark" aria-hidden="true">
+            <Layers3 :size="22" />
+          </div>
+          <h1>{{ t('app.title') }}</h1>
         </div>
-        <h1>{{ t('app.title') }}</h1>
-        <span class="status" :class="runState.className">{{ runState.label }}</span>
+        <button class="mobile-close" @click="mobileMenuOpen = false">
+          <X :size="24" />
+        </button>
       </div>
 
-      <div class="header-controls">
-        <nav class="tabs" :aria-label="t('tabs.label')">
-          <button
-            v-for="tab in tabs"
-            :key="tab.id"
-            class="tab"
-            :class="{ active: activeTab === tab.id }"
-            type="button"
-            @click="activeTab = tab.id"
-          >
-            {{ tab.label }}
-          </button>
-        </nav>
+      <nav class="sidebar-nav" :aria-label="t('tabs.label')">
+        <button
+          v-for="tab in tabs"
+          :key="tab.id"
+          class="nav-item"
+          :class="{ active: activeTab === tab.id }"
+          type="button"
+          @click="activeTab = tab.id"
+        >
+          <component :is="tab.icon" :size="20" class="nav-icon" />
+          <span>{{ tab.label }}</span>
+        </button>
+      </nav>
 
+      <div class="sidebar-footer">
         <div class="preferences">
           <div class="locale-switch" role="group" :aria-label="t('preferences.language')">
             <Languages class="locale-icon" :size="16" aria-hidden="true" />
@@ -287,130 +315,163 @@ onMounted(() => {
           </button>
         </div>
       </div>
-    </div>
-  </header>
+    </aside>
 
-  <main class="shell page">
-    <section class="toolbar" :aria-label="t('toolbar.statusLabel')">
-      <div class="toolbar-info">
-        <div class="muted">{{ lastRunText }}</div>
-        <div v-if="latestError" class="error-text">
-          <AlertCircle :size="15" />
-          <span>{{ latestError }}</span>
+    <!-- Main Content Area -->
+    <main class="main-content">
+      <header class="content-header">
+        <div class="header-left">
+          <button class="mobile-menu-btn" @click="mobileMenuOpen = true">
+            <Menu :size="24" />
+          </button>
+          <div class="breadcrumb">
+            <h2>{{ currentTabName }}</h2>
+            <span class="status-badge" :class="runState.className">
+              <span class="status-dot"></span>
+              {{ runState.label }}
+            </span>
+          </div>
         </div>
+
+        <div class="toolbar-actions">
+          <button class="button" type="button" :disabled="refreshing" @click="refreshAll">
+            <RefreshCw :size="18" :class="{ spin: refreshing }" />
+            <span>{{ refreshing ? t('toolbar.refreshing') : t('toolbar.refresh') }}</span>
+          </button>
+          <button
+            class="button primary"
+            type="button"
+            :disabled="runningCheck"
+            @click="runManualCheck"
+          >
+            <PlayCircle v-if="!runningCheck" :size="18" />
+            <RefreshCw v-else :size="18" class="spin" />
+            <span>{{ runningCheck ? t('toolbar.checking') : t('toolbar.runNow') }}</span>
+          </button>
+        </div>
+      </header>
+
+      <div class="content-body">
+        <div class="toolbar-info-banner">
+          <div class="muted">{{ lastRunText }}</div>
+          <div v-if="latestError" class="error-text">
+            <AlertCircle :size="15" />
+            <span>{{ latestError }}</span>
+          </div>
+        </div>
+
+        <Transition name="fade" mode="out-in">
+          <section v-if="activeTab === 'dashboard'" class="tab-content" key="dashboard">
+            <div class="grid">
+              <article class="metric-card">
+                <div class="metric-header">
+                  <h2>{{ t('dashboard.channelStatus') }}</h2>
+                  <div class="metric-icon"><ServerCrash :size="20"/></div>
+                </div>
+                <div class="metric">{{ formatNumber(snapshot?.channels.total) }}</div>
+                <p class="muted">
+                  {{
+                    t('dashboard.channelSummary', {
+                      enabled: formatNumber(snapshot?.channels.enabled),
+                      autoDisabled: formatNumber(snapshot?.channels.autoDisabled),
+                    })
+                  }}
+                </p>
+              </article>
+
+              <article class="metric-card">
+                <div class="metric-header">
+                  <h2>{{ t('dashboard.recentLogs') }}</h2>
+                  <div class="metric-icon"><FileText :size="20"/></div>
+                </div>
+                <div class="metric">{{ formatNumber(snapshot?.logs.total) }}</div>
+                <p class="muted">
+                  {{
+                    t('dashboard.logSummary', {
+                      success: formatNumber(snapshot?.logs.success),
+                      errors: formatNumber(snapshot?.logs.errors),
+                    })
+                  }}
+                </p>
+              </article>
+
+              <article class="metric-card">
+                <div class="metric-header">
+                  <h2>{{ t('dashboard.failureRate') }}</h2>
+                  <div class="metric-icon"><AlertCircle :size="20"/></div>
+                </div>
+                <div class="metric">{{ formatPercent(snapshot?.logs.failureRate) }}</div>
+                <p class="muted">
+                  {{
+                    t('dashboard.throughput', {
+                      rpm: formatNumber(snapshot?.logs.rpm),
+                      tpm: formatNumber(snapshot?.logs.tpm),
+                    })
+                  }}
+                </p>
+              </article>
+
+              <article class="metric-card">
+                <div class="metric-header">
+                  <h2>{{ t('dashboard.lowBalance') }}</h2>
+                  <div class="metric-icon"><AlertCircle :size="20"/></div>
+                </div>
+                <div class="metric">{{ formatNumber(snapshot?.channels.lowBalance?.length) }}</div>
+                <p class="muted">{{ slowestChannelText }}</p>
+              </article>
+            </div>
+          </section>
+
+          <section v-else-if="activeTab === 'report'" class="tab-content" key="report">
+            <article class="panel report-panel">
+              <div class="panel-header">
+                <h2>{{ t('report.title') }}</h2>
+                <div class="window-controls">
+                  <span></span><span></span><span></span>
+                </div>
+              </div>
+              <pre class="terminal">{{ reportText }}</pre>
+            </article>
+          </section>
+
+          <section v-else-if="activeTab === 'channels'" class="tab-content" key="channels">
+            <article class="panel table-panel">
+              <div class="panel-header">
+                <h2>{{ t('channels.title') }}</h2>
+              </div>
+              <div class="table-wrap">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>{{ t('channels.id') }}</th>
+                      <th>{{ t('channels.name') }}</th>
+                      <th>{{ t('channels.status') }}</th>
+                      <th>{{ t('channels.balance') }}</th>
+                      <th>{{ t('channels.latency') }}</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr v-if="!visibleChannels.length">
+                      <td colspan="5" class="empty">{{ t('channels.empty') }}</td>
+                    </tr>
+                    <tr v-for="channel in visibleChannels" :key="channel.id">
+                      <td class="channel-id">{{ channel.id }}</td>
+                      <td>{{ channel.name }}</td>
+                      <td>
+                        <span class="status-badge compact" :class="channelStatusClass(channel)">
+                          {{ formatChannelStatus(channel) }}
+                        </span>
+                      </td>
+                      <td class="font-mono">{{ formatBalance(channel.balance) }}</td>
+                      <td class="font-mono">{{ formatLatency(channel.responseTimeMs) }}</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </article>
+          </section>
+        </Transition>
       </div>
-
-      <div class="toolbar-actions">
-        <button class="button" type="button" :disabled="refreshing" @click="refreshAll">
-          <RefreshCw :size="18" :class="{ spin: refreshing }" />
-          <span>{{ refreshing ? t('toolbar.refreshing') : t('toolbar.refresh') }}</span>
-        </button>
-        <button
-          class="button primary"
-          type="button"
-          :disabled="runningCheck"
-          @click="runManualCheck"
-        >
-          <PlayCircle v-if="!runningCheck" :size="18" />
-          <RefreshCw v-else :size="18" class="spin" />
-          <span>{{ runningCheck ? t('toolbar.checking') : t('toolbar.runNow') }}</span>
-        </button>
-      </div>
-    </section>
-
-    <section v-show="activeTab === 'dashboard'" class="tab-content">
-      <div class="grid">
-        <article class="metric-card">
-          <h2>{{ t('dashboard.channelStatus') }}</h2>
-          <div class="metric">{{ formatNumber(snapshot?.channels.total) }}</div>
-          <p class="muted">
-            {{
-              t('dashboard.channelSummary', {
-                enabled: formatNumber(snapshot?.channels.enabled),
-                autoDisabled: formatNumber(snapshot?.channels.autoDisabled),
-              })
-            }}
-          </p>
-        </article>
-
-        <article class="metric-card">
-          <h2>{{ t('dashboard.recentLogs') }}</h2>
-          <div class="metric">{{ formatNumber(snapshot?.logs.total) }}</div>
-          <p class="muted">
-            {{
-              t('dashboard.logSummary', {
-                success: formatNumber(snapshot?.logs.success),
-                errors: formatNumber(snapshot?.logs.errors),
-              })
-            }}
-          </p>
-        </article>
-
-        <article class="metric-card">
-          <h2>{{ t('dashboard.failureRate') }}</h2>
-          <div class="metric">{{ formatPercent(snapshot?.logs.failureRate) }}</div>
-          <p class="muted">
-            {{
-              t('dashboard.throughput', {
-                rpm: formatNumber(snapshot?.logs.rpm),
-                tpm: formatNumber(snapshot?.logs.tpm),
-              })
-            }}
-          </p>
-        </article>
-
-        <article class="metric-card">
-          <h2>{{ t('dashboard.lowBalance') }}</h2>
-          <div class="metric">{{ formatNumber(snapshot?.channels.lowBalance?.length) }}</div>
-          <p class="muted">{{ slowestChannelText }}</p>
-        </article>
-      </div>
-    </section>
-
-    <section v-show="activeTab === 'report'" class="tab-content">
-      <article class="panel">
-        <div class="panel-header">
-          <h2>{{ t('report.title') }}</h2>
-        </div>
-        <pre>{{ reportText }}</pre>
-      </article>
-    </section>
-
-    <section v-show="activeTab === 'channels'" class="tab-content">
-      <article class="panel">
-        <div class="panel-header">
-          <h2>{{ t('channels.title') }}</h2>
-        </div>
-        <div class="table-wrap">
-          <table>
-            <thead>
-              <tr>
-                <th>{{ t('channels.id') }}</th>
-                <th>{{ t('channels.name') }}</th>
-                <th>{{ t('channels.status') }}</th>
-                <th>{{ t('channels.balance') }}</th>
-                <th>{{ t('channels.latency') }}</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr v-if="!visibleChannels.length">
-                <td colspan="5" class="empty">{{ t('channels.empty') }}</td>
-              </tr>
-              <tr v-for="channel in visibleChannels" :key="channel.id">
-                <td class="channel-id">{{ channel.id }}</td>
-                <td>{{ channel.name }}</td>
-                <td>
-                  <span class="status compact" :class="channelStatusClass(channel)">
-                    {{ formatChannelStatus(channel) }}
-                  </span>
-                </td>
-                <td>{{ formatBalance(channel.balance) }}</td>
-                <td>{{ formatLatency(channel.responseTimeMs) }}</td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-      </article>
-    </section>
-  </main>
+    </main>
+  </div>
 </template>
