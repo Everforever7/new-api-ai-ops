@@ -35,6 +35,32 @@ function createAuthError() {
   return error
 }
 
+function createHeaders(customHeaders = {}, useStoredAuth = true) {
+  const headers = {
+    'Content-Type': 'application/json',
+    ...customHeaders,
+  }
+
+  const auth = getStoredAuth()
+  if (useStoredAuth && auth && !hasAuthorizationHeader(headers)) {
+    headers['Authorization'] = auth
+  }
+
+  return headers
+}
+
+async function readErrorMessage(res) {
+  const text = await res.text().catch(() => '')
+  if (!text) return res.statusText
+
+  try {
+    const data = JSON.parse(text)
+    return data.message || data.error || res.statusText
+  } catch {
+    return text
+  }
+}
+
 function createBasicAuthHeader(username, password) {
   const value = `${username}:${password}`
   const bytes = new TextEncoder().encode(value)
@@ -51,15 +77,7 @@ async function api(path, options = {}) {
     useStoredAuth = true,
     ...fetchOptions
   } = options
-  const headers = {
-    'Content-Type': 'application/json',
-    ...(customHeaders || {}),
-  }
-
-  const auth = getStoredAuth()
-  if (useStoredAuth && auth && !hasAuthorizationHeader(headers)) {
-    headers['Authorization'] = auth
-  }
+  const headers = createHeaders(customHeaders, useStoredAuth)
 
   const res = await fetch(path, {
     ...fetchOptions,
@@ -153,6 +171,102 @@ export function sendAssistantMessage(message) {
     method: 'POST',
     body: JSON.stringify({ message }),
   })
+}
+
+export async function streamAssistantMessage(
+  message,
+  requestOptions = {},
+  handlers = {}
+) {
+  const res = await fetch('/api/assistant/message/stream', {
+    method: 'POST',
+    headers: createHeaders(),
+    body: JSON.stringify({
+      message,
+      userMessageId: requestOptions.userMessageId,
+      assistantMessageId: requestOptions.assistantMessageId,
+    }),
+  })
+
+  if (res.status === 401) {
+    dispatchUnauthorized()
+    throw createAuthError()
+  }
+
+  if (!res.ok) {
+    throw new Error(await readErrorMessage(res))
+  }
+
+  if (!res.body) {
+    throw new Error('Streaming response is not supported by this browser')
+  }
+
+  const reader = res.body.getReader()
+  const decoder = new TextDecoder()
+  let buffer = ''
+  let donePayload = null
+
+  const handleBlock = (block) => {
+    const parsed = parseSseBlock(block)
+    if (!parsed) return
+
+    const payload = parsed.data ? JSON.parse(parsed.data) : {}
+    if (parsed.event === 'message') {
+      handlers.onMessage?.(payload.message)
+      return
+    }
+    if (parsed.event === 'delta') {
+      handlers.onDelta?.(payload)
+      return
+    }
+    if (parsed.event === 'done') {
+      donePayload = payload
+      handlers.onDone?.(payload)
+      return
+    }
+    if (parsed.event === 'error') {
+      throw new Error(payload.message || 'Assistant stream failed')
+    }
+  }
+
+  while (true) {
+    const { done, value } = await reader.read()
+    if (done) break
+
+    buffer += decoder.decode(value, { stream: true })
+    const blocks = buffer.split(/\r?\n\r?\n/)
+    buffer = blocks.pop() || ''
+    for (const block of blocks) {
+      handleBlock(block)
+    }
+  }
+
+  const tail = decoder.decode()
+  if (tail) buffer += tail
+  if (buffer.trim()) handleBlock(buffer)
+
+  return donePayload
+}
+
+function parseSseBlock(block) {
+  const lines = block.split(/\r?\n/)
+  const data = []
+  let event = 'message'
+
+  for (const line of lines) {
+    if (!line || line.startsWith(':')) continue
+
+    const index = line.indexOf(':')
+    const field = index >= 0 ? line.slice(0, index) : line
+    let value = index >= 0 ? line.slice(index + 1) : ''
+    if (value.startsWith(' ')) value = value.slice(1)
+
+    if (field === 'event') event = value
+    if (field === 'data') data.push(value)
+  }
+
+  if (!data.length) return null
+  return { event, data: data.join('\n') }
 }
 
 export function fetchLlmModels(llm) {

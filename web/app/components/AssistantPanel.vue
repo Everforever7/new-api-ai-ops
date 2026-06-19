@@ -26,13 +26,20 @@ const messages = computed(() => props.session?.messages || [])
 const lastActions = computed(() => props.session?.lastActions || [])
 const canSend = computed(() => draft.value.trim().length > 0 && !props.sending)
 
+function scrollMessagesToEnd() {
+  nextTick(() => {
+    messagesEnd.value?.scrollIntoView({ block: 'end' })
+  })
+}
+
 watch(
   () => messages.value.length,
-  () => {
-    nextTick(() => {
-      messagesEnd.value?.scrollIntoView({ block: 'end' })
-    })
-  }
+  scrollMessagesToEnd
+)
+
+watch(
+  () => messages.value.map((item) => `${item.id}:${item.content}`).join('\n'),
+  scrollMessagesToEnd
 )
 
 function sendMessage() {
@@ -56,6 +63,10 @@ function riskLabel(action) {
 
 function formatPayload(payload) {
   return JSON.stringify(payload, null, 2)
+}
+
+function isPendingAssistantMessage(item) {
+  return item.role === 'assistant' && !item.content && props.sending
 }
 </script>
 
@@ -119,7 +130,21 @@ function formatPayload(payload) {
                           : t('assistant.assistantLabel')
                       }}
                     </div>
-                    <p>{{ item.content }}</p>
+                    <p
+                      :class="{
+                        'assistant-message-pending': isPendingAssistantMessage(item),
+                      }"
+                    >
+                      <template v-if="isPendingAssistantMessage(item)">
+                        <span>{{ t('assistant.generating') }}</span>
+                        <span class="assistant-typing-dots" aria-hidden="true">
+                          <span></span>
+                          <span></span>
+                          <span></span>
+                        </span>
+                      </template>
+                      <template v-else>{{ item.content }}</template>
+                    </p>
                   </div>
                 </article>
               </template>

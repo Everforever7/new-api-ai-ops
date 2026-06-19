@@ -39,6 +39,14 @@ function jsonError(message: string, status = 500) {
   return Response.json({ success: false, message }, { status })
 }
 
+function sseEvent(event: string, data: unknown) {
+  return `event: ${event}\ndata: ${JSON.stringify(data)}\n\n`
+}
+
+function streamErrorMessage(error: unknown) {
+  return error instanceof Error ? error.message : String(error)
+}
+
 function parseBasicAuth(header: string | null) {
   if (!header?.startsWith('Basic ')) return undefined
   try {
@@ -276,6 +284,56 @@ async function handleApi(
 
     if (url.pathname === '/api/assistant/reset' && req.method === 'POST') {
       return json(runtime.resetAssistantSession())
+    }
+
+    if (url.pathname === '/api/assistant/message/stream' && req.method === 'POST') {
+      const body = await req.json().catch(() => {
+        throw new Error('invalid assistant message JSON')
+      })
+      if (!isRecord(body) || typeof body.message !== 'string') {
+        throw new Error('assistant message is required')
+      }
+
+      const assistantInput = body.message
+      const encoder = new TextEncoder()
+      const userMessageId =
+        typeof body.userMessageId === 'string' ? body.userMessageId : undefined
+      const assistantMessageId =
+        typeof body.assistantMessageId === 'string'
+          ? body.assistantMessageId
+          : undefined
+
+      return new Response(
+        new ReadableStream({
+          async start(controller) {
+            const send = (event: string, data: unknown) => {
+              controller.enqueue(encoder.encode(sseEvent(event, data)))
+            }
+
+            try {
+              await runtime.streamAssistantMessage(
+                assistantInput,
+                { userMessageId, assistantMessageId },
+                async (event) => {
+                  const { type, ...data } = event
+                  send(type, data)
+                }
+              )
+            } catch (error) {
+              send('error', { message: streamErrorMessage(error) })
+            } finally {
+              controller.close()
+            }
+          },
+        }),
+        {
+          headers: {
+            'Content-Type': 'text/event-stream; charset=utf-8',
+            'Cache-Control': 'no-cache',
+            Connection: 'keep-alive',
+          },
+        }
+      )
     }
 
     if (url.pathname === '/api/assistant/message' && req.method === 'POST') {

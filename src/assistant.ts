@@ -1,6 +1,6 @@
 import type { AppConfig } from './config'
 import type { RawAction } from './actions'
-import { loadEffectiveLlmConfig } from './settings'
+import { loadEffectiveLlmConfig, loadOpsSettings } from './settings'
 
 export type AssistantMessage = {
   id: string
@@ -17,6 +17,19 @@ export type AssistantTurnPlan = {
   secrets: AssistantSecret[]
 }
 
+export type AssistantPreparedTurn = {
+  userMessage: AssistantMessage
+  redactedInput: string
+  redacted: RedactionResult
+  secrets: AssistantSecret[]
+}
+
+export type AssistantResponseOptions = {
+  assistantMessage?: AssistantMessage
+  userMessageId?: string
+  onReplyDelta?: (delta: string) => void | Promise<void>
+}
+
 type ChatMessage = {
   role: 'system' | 'user' | 'assistant'
   content: string
@@ -24,6 +37,17 @@ type ChatMessage = {
 
 type ChatCompletionResponse = {
   choices?: Array<{
+    message?: {
+      content?: string
+    }
+  }>
+}
+
+type ChatCompletionStreamChunk = {
+  choices?: Array<{
+    delta?: {
+      content?: string
+    }
     message?: {
       content?: string
     }
@@ -50,30 +74,34 @@ type AssistantPlan = {
 const MAX_HISTORY_MESSAGES = 12
 const MAX_MESSAGE_LENGTH = 6000
 
-const ASSISTANT_SYSTEM_PROMPT = [
-  '你是 new-api AI 运维助手，负责把自然语言整理成安全的动作草稿。',
+const CORE_ASSISTANT_SYSTEM_PROMPT = [
+  '你是 new-api AI 运维助手，负责把自然语言整理成动作草稿。',
   '你只能返回 JSON，不要返回 Markdown。',
   'JSON 结构: {"reply":"给操作者的中文回复","missing_fields":[],"proposed_actions":[]}',
-  'proposed_actions 只允许 create_channel、test_channel、update_channel，其他请求只回复说明，不要生成动作。',
-  '删除渠道不是可执行目标；用户要求删除时 reply 说明当前保持 never，不要生成动作。',
-  '创建渠道动作格式: {"action":"create_channel","target":"渠道名称","risk":"medium","requires_confirm":true,"reason":"原因","payload":{"mode":"single","channel":{"name":"名称","type":1,"key":"[API_KEY_1]","base_url":"https://...","models":"model-a,model-b","group":"default","priority":0,"weight":0,"remark":"可选备注"}}}',
-  '测试渠道动作格式: {"action":"test_channel","target":"channel:12","channel_id":12,"risk":"low","requires_confirm":true,"reason":"原因","payload":{"model":"可选模型"}}。',
-  '更新备注动作格式: {"action":"update_channel","target":"channel:12","channel_id":12,"risk":"medium","requires_confirm":true,"reason":"原因","payload":{"remark":"备注内容"}}。',
-  '创建渠道必须有 base_url、key、models；如果缺字段，只追问，不要编造，也不要生成 create_channel。',
-  '模型名没有固定前缀，mimo-v2.5-pro、mimo-v2.5、provider/model、custom-001 都可能是合法模型。用户在“模型/支持模型/models”附近给出的逗号、顿号、空格分隔值都应视作模型列表。',
-  '输入里的密钥、Authorization、Cookie 会以 [API_KEY_1] 这类占位符出现，你必须只保留占位符，不要要求用户重复明文密钥。',
-  '如果用户分多轮补充信息，你可以结合最近对话上下文生成完整动作；例如上一轮已有 [API_KEY_1] 和 base_url，本轮只补模型时，可以使用 [API_KEY_1]。',
-  'create_channel 的 payload.channel.key 必须使用密钥占位符，例如 [API_KEY_1]，不能写明文。',
-  '所有动作都只是草稿，最终执行会进入权限、确认和保护规则；回复中要提醒用户去动作队列确认。',
+  'proposed_actions 只允许 create_channel、test_channel、update_channel；其他请求只回复说明，不要生成动作。',
+  '不要泄露、复述或猜测任何密钥、Authorization、Cookie；只能使用后端提供的占位符。',
+  '删除渠道永远不是可执行目标；用户要求删除时只回复说明，不要生成动作。',
+  '你只能提出动作草稿，不能声称已经执行；实际执行状态由后端权限、确认策略、保护规则和动作队列决定。',
 ].join('\n')
+
+function buildAssistantSystemPrompt(assistantInstructions: string) {
+  const custom = assistantInstructions.trim()
+  return custom
+    ? `${CORE_ASSISTANT_SYSTEM_PROMPT}\n\n可编辑助手提示词:\n${custom}`
+    : CORE_ASSISTANT_SYSTEM_PROMPT
+}
 
 function now() {
   return new Date().toISOString()
 }
 
-function message(role: AssistantMessage['role'], content: string): AssistantMessage {
+export function createAssistantMessage(
+  role: AssistantMessage['role'],
+  content: string,
+  id?: string
+): AssistantMessage {
   return {
-    id: `assistant-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+    id: id || `assistant-${Date.now()}-${Math.random().toString(36).slice(2)}`,
     role,
     content,
     createdAt: now(),
@@ -143,49 +171,87 @@ export function redactAssistantInput(
   }
 }
 
+export function prepareAssistantTurn(
+  input: string,
+  knownSecrets: AssistantSecret[] = [],
+  options: AssistantResponseOptions = {}
+): AssistantPreparedTurn {
+  const redacted = redactAssistantInput(input, knownSecrets)
+  const userMessage = createAssistantMessage(
+    'user',
+    redacted.text,
+    options.userMessageId
+  )
+
+  return {
+    userMessage,
+    redactedInput: redacted.text,
+    redacted,
+    secrets: redacted.secrets,
+  }
+}
+
 export async function planAssistantTurn(
   config: AppConfig,
   history: AssistantMessage[],
   input: string,
   knownSecrets: AssistantSecret[] = []
 ): Promise<AssistantTurnPlan> {
-  const redacted = redactAssistantInput(input, knownSecrets)
+  const prepared = prepareAssistantTurn(input, knownSecrets)
+  return planAssistantResponse(config, history, prepared)
+}
+
+export async function planAssistantResponse(
+  config: AppConfig,
+  history: AssistantMessage[],
+  prepared: AssistantPreparedTurn,
+  options: AssistantResponseOptions = {}
+): Promise<AssistantTurnPlan> {
   const llm = await loadEffectiveLlmConfig(config)
+  const settings = await loadOpsSettings()
   const planned = llm.apiKey
-    ? (await planWithLlm(llm, history, redacted.text).catch(() =>
+    ? (await planWithLlm(
+        llm,
+        history,
+        prepared.redactedInput,
+        settings.prompt.assistantInstructions,
+        options
+      ).catch(() =>
         assistantUnavailablePlan()
       )) ?? assistantUnavailablePlan()
     : assistantNotConfiguredPlan()
-  const finalized = finalizePlan(planned, redacted)
+  const finalized = finalizePlan(planned, prepared.redacted)
   const reply =
     finalized.missingFields.length &&
     finalized.rawActions.length === 0 &&
     planned.rawActions.length > 0
       ? validationFailedReply(finalized.missingFields, planned.reply)
       : finalized.reply
+  const assistantMessage = options.assistantMessage
+    ? { ...options.assistantMessage, content: reply }
+    : createAssistantMessage('assistant', reply)
 
   return {
-    userMessage: message('user', redacted.text),
-    assistantMessage: message('assistant', reply),
+    userMessage: prepared.userMessage,
+    assistantMessage,
     rawActions: finalized.rawActions,
     missingFields: finalized.missingFields,
-    secrets: redacted.secrets,
+    secrets: prepared.secrets,
   }
 }
 
 async function planWithLlm(
   llm: AppConfig['llm'],
   history: AssistantMessage[],
-  sanitizedInput: string
+  sanitizedInput: string,
+  assistantInstructions: string,
+  options: AssistantResponseOptions = {}
 ): Promise<AssistantPlan | undefined> {
-  const messages: ChatMessage[] = [
-    { role: 'system', content: ASSISTANT_SYSTEM_PROMPT },
-    ...history.slice(-MAX_HISTORY_MESSAGES).map((item) => ({
-      role: item.role,
-      content: item.content,
-    })),
-    { role: 'user', content: sanitizedInput },
-  ]
+  const messages = buildChatMessages(history, sanitizedInput, assistantInstructions)
+
+  if (options.onReplyDelta) {
+    return planWithLlmStream(llm, messages, options.onReplyDelta)
+  }
 
   const response = await fetch(`${llm.baseUrl}/chat/completions`, {
     method: 'POST',
@@ -204,11 +270,156 @@ async function planWithLlm(
   const text = await response.text()
   if (!response.ok) return undefined
 
-  const json = JSON.parse(text) as ChatCompletionResponse
-  const content = json.choices?.[0]?.message?.content?.trim()
-  if (!content) return undefined
+  return parseChatCompletionText(text)
+}
 
-  return parseAssistantJson(content)
+function buildChatMessages(
+  history: AssistantMessage[],
+  sanitizedInput: string,
+  assistantInstructions: string
+): ChatMessage[] {
+  return [
+    {
+      role: 'system',
+      content: buildAssistantSystemPrompt(assistantInstructions),
+    },
+    ...history.slice(-MAX_HISTORY_MESSAGES).map((item) => ({
+      role: item.role,
+      content: item.content,
+    })),
+    { role: 'user', content: sanitizedInput },
+  ]
+}
+
+async function planWithLlmStream(
+  llm: AppConfig['llm'],
+  messages: ChatMessage[],
+  onReplyDelta: (delta: string) => void | Promise<void>
+): Promise<AssistantPlan | undefined> {
+  const response = await fetch(`${llm.baseUrl}/chat/completions`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${llm.apiKey}`,
+    },
+    body: JSON.stringify({
+      model: llm.model,
+      messages,
+      temperature: llm.temperature,
+      response_format: { type: 'json_object' },
+      stream: true,
+    }),
+  })
+
+  if (!response.ok) {
+    await response.text().catch(() => '')
+    return undefined
+  }
+
+  const body = response.body
+  if (!body) {
+    const text = await response.text()
+    return parseChatCompletionText(text)
+  }
+
+  const reader = body.getReader()
+  const decoder = new TextDecoder()
+  let sseBuffer = ''
+  let rawText = ''
+  let content = ''
+  let emittedReply = ''
+
+  const emitReplyFromContent = async () => {
+    const reply = extractPartialJsonStringField(content, 'reply')
+    if (reply === undefined) return
+    if (!reply.startsWith(emittedReply)) return
+    const delta = reply.slice(emittedReply.length)
+    if (!delta) return
+    emittedReply = reply
+    await onReplyDelta(delta)
+  }
+
+  const handleData = async (data: string) => {
+    if (!data || data === '[DONE]') return
+
+    let parsed: ChatCompletionStreamChunk
+    try {
+      parsed = JSON.parse(data) as ChatCompletionStreamChunk
+    } catch {
+      return
+    }
+
+    const delta = parsed.choices
+      ?.map((choice) => choice.delta?.content || choice.message?.content || '')
+      .join('')
+
+    if (!delta) return
+    content += delta
+    await emitReplyFromContent()
+  }
+
+  const handleBlock = async (block: string) => {
+    const data = block
+      .split(/\r?\n/)
+      .filter((line) => line.startsWith('data:'))
+      .map((line) => line.slice('data:'.length).trimStart())
+      .join('\n')
+      .trim()
+
+    await handleData(data)
+  }
+
+  while (true) {
+    const { done, value } = await reader.read()
+    if (done) break
+
+    const chunk = decoder.decode(value, { stream: true })
+    rawText += chunk
+    sseBuffer += chunk
+
+    const blocks = sseBuffer.split(/\r?\n\r?\n/)
+    sseBuffer = blocks.pop() || ''
+    for (const block of blocks) {
+      await handleBlock(block)
+    }
+  }
+
+  const tail = decoder.decode()
+  if (tail) {
+    rawText += tail
+    sseBuffer += tail
+  }
+
+  if (sseBuffer.trim()) {
+    await handleBlock(sseBuffer)
+  }
+
+  const streamedPlan = content ? parseAssistantJson(content) : undefined
+  if (streamedPlan) {
+    if (streamedPlan.reply.startsWith(emittedReply)) {
+      const delta = streamedPlan.reply.slice(emittedReply.length)
+      if (delta) await onReplyDelta(delta)
+    }
+    return streamedPlan
+  }
+
+  const directPlan = parseChatCompletionText(rawText) || parseAssistantJson(rawText)
+  if (directPlan?.reply) {
+    await onReplyDelta(directPlan.reply)
+  }
+  return directPlan
+}
+
+function parseChatCompletionText(text: string): AssistantPlan | undefined {
+  let json: ChatCompletionResponse
+  try {
+    json = JSON.parse(text) as ChatCompletionResponse
+  } catch {
+    return undefined
+  }
+
+  const content = json.choices?.[0]?.message?.content?.trim()
+  return content ? parseAssistantJson(content) : undefined
 }
 
 function parseAssistantJson(content: string): AssistantPlan | undefined {
@@ -226,6 +437,60 @@ function parseAssistantJson(content: string): AssistantPlan | undefined {
     rawActions: readRawActions(parsed.proposed_actions),
     missingFields: readStringList(parsed.missing_fields),
   }
+}
+
+function extractPartialJsonStringField(content: string, fieldName: string) {
+  const fieldPattern = new RegExp(`"${escapeRegExp(fieldName)}"\\s*:`)
+  const fieldMatch = fieldPattern.exec(content)
+  if (!fieldMatch) return undefined
+
+  let index = fieldMatch.index + fieldMatch[0].length
+  while (/\s/.test(content[index] || '')) index += 1
+  if (content[index] !== '"') return undefined
+
+  index += 1
+  let result = ''
+
+  while (index < content.length) {
+    const char = content[index]
+
+    if (char === '"') return result
+
+    if (char !== '\\') {
+      result += char
+      index += 1
+      continue
+    }
+
+    const escaped = content[index + 1]
+    if (!escaped) return result
+
+    if (escaped === 'u') {
+      const hex = content.slice(index + 2, index + 6)
+      if (!/^[0-9a-fA-F]{4}$/.test(hex)) return result
+      result += String.fromCharCode(Number.parseInt(hex, 16))
+      index += 6
+      continue
+    }
+
+    result += decodeJsonEscape(escaped)
+    index += 2
+  }
+
+  return result
+}
+
+function decodeJsonEscape(value: string) {
+  if (value === 'n') return '\n'
+  if (value === 'r') return '\r'
+  if (value === 't') return '\t'
+  if (value === 'b') return '\b'
+  if (value === 'f') return '\f'
+  return value
+}
+
+function escapeRegExp(value: string) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
 }
 
 function assistantNotConfiguredPlan(): AssistantPlan {

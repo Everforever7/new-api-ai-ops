@@ -23,7 +23,7 @@ import {
   runCheck as requestRunCheck,
   saveSettings as requestSaveSettings,
   resetAssistantSession as requestResetAssistantSession,
-  sendAssistantMessage as requestSendAssistantMessage,
+  streamAssistantMessage as requestStreamAssistantMessage,
 } from './api.js'
 import { LANGUAGES, resolveLocale, translate } from './i18n.js'
 
@@ -215,6 +215,122 @@ function clone(value) {
   return JSON.parse(JSON.stringify(value))
 }
 
+function createClientMessageId(role) {
+  return `assistant-${role}-${Date.now()}-${Math.random().toString(36).slice(2)}`
+}
+
+function redactAssistantPreview(input) {
+  return input
+    .slice(0, 6000)
+    .replace(
+      /(authorization\s*(?:[:：=]\s*)?)(Bearer\s+[A-Za-z0-9._~+/=-]+)/gi,
+      '$1[AUTHORIZATION]'
+    )
+    .replace(/(cookie\s*[:：=]\s*)([^\n]+)/gi, '$1[COOKIE]')
+    .replace(
+      /((?:api[_\s-]?key|密钥|key)\s*[:：=]\s*)([^\s,，;；]+)/gi,
+      '$1[API_KEY]'
+    )
+    .replace(
+      /((?:api[_\s-]?key|密钥|key)\s+)([A-Za-z0-9._~+/=-]{8,})/gi,
+      '$1[API_KEY]'
+    )
+    .replace(/\b(?:sk|rk|pk)-[A-Za-z0-9][A-Za-z0-9._-]{12,}\b/g, '[API_KEY]')
+}
+
+function assistantSessionBase() {
+  return assistantSession.value || {
+    messages: [],
+    lastActions: [],
+    updatedAt: undefined,
+  }
+}
+
+function appendOptimisticAssistantTurn(message, userMessageId, assistantMessageId) {
+  const session = assistantSessionBase()
+  const createdAt = new Date().toISOString()
+  const messages = [
+    ...(session.messages || []),
+    {
+      id: userMessageId,
+      role: 'user',
+      content: redactAssistantPreview(message),
+      createdAt,
+    },
+    {
+      id: assistantMessageId,
+      role: 'assistant',
+      content: '',
+      createdAt,
+    },
+  ].slice(-80)
+
+  assistantSession.value = {
+    ...session,
+    messages,
+    lastActions: [],
+    updatedAt: createdAt,
+  }
+}
+
+function upsertAssistantMessage(message) {
+  if (!message?.id) return
+
+  const session = assistantSessionBase()
+  const messages = [...(session.messages || [])]
+  const index = messages.findIndex((item) => item.id === message.id)
+
+  if (index >= 0) {
+    messages[index] = { ...messages[index], ...message }
+  } else {
+    messages.push(message)
+  }
+
+  assistantSession.value = {
+    ...session,
+    messages: messages.slice(-80),
+    updatedAt: new Date().toISOString(),
+  }
+}
+
+function appendAssistantDelta(id, delta) {
+  if (!id || !delta) return
+
+  const session = assistantSessionBase()
+  const messages = [...(session.messages || [])]
+  const index = messages.findIndex((item) => item.id === id)
+  if (index < 0) return
+
+  messages[index] = {
+    ...messages[index],
+    content: `${messages[index].content || ''}${delta}`,
+  }
+  assistantSession.value = {
+    ...session,
+    messages,
+    updatedAt: new Date().toISOString(),
+  }
+}
+
+function markAssistantMessageFailed(id) {
+  const session = assistantSessionBase()
+  const messages = [...(session.messages || [])]
+  const index = messages.findIndex((item) => item.id === id)
+  if (index < 0) return
+
+  const current = messages[index].content || ''
+  const failed = t('assistant.sendFailedInline')
+  messages[index] = {
+    ...messages[index],
+    content: current ? `${current}\n\n${failed}` : failed,
+  }
+  assistantSession.value = {
+    ...session,
+    messages,
+    updatedAt: new Date().toISOString(),
+  }
+}
+
 function updateSetting(path, value) {
   if (!settings.value) return
 
@@ -344,10 +460,31 @@ async function loadAssistantSession() {
 
 async function sendAssistantMessage(message) {
   assistantSending.value = true
+  const userMessageId = createClientMessageId('user')
+  const assistantMessageId = createClientMessageId('assistant')
+  appendOptimisticAssistantTurn(message, userMessageId, assistantMessageId)
+
   try {
-    assistantSession.value = await requestSendAssistantMessage(message)
+    const result = await requestStreamAssistantMessage(
+      message,
+      { userMessageId, assistantMessageId },
+      {
+        onMessage: (item) => upsertAssistantMessage(item),
+        onDelta: (event) => appendAssistantDelta(event.id, event.delta),
+        onDone: (event) => {
+          if (event.session) {
+            assistantSession.value = event.session
+          }
+        },
+      }
+    )
+
+    if (result?.session) {
+      assistantSession.value = result.session
+    }
     await loadActions()
   } catch (error) {
+    markAssistantMessageFailed(assistantMessageId)
     notifyError('errors.assistantSendFailed', error)
   } finally {
     assistantSending.value = false

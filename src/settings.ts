@@ -19,6 +19,7 @@ export type OpsSettings = {
     includeLatency: boolean
     includeBalance: boolean
     customInstructions: string
+    assistantInstructions: string
   }
   aiExecution: {
     enabled: boolean
@@ -79,6 +80,16 @@ const DEFAULT_SETTINGS: OpsSettings = {
     includeLatency: true,
     includeBalance: false,
     customInstructions: '',
+    assistantInstructions: [
+      '创建渠道动作格式: {"action":"create_channel","target":"渠道名称","risk":"medium","requires_confirm":true,"reason":"原因","payload":{"mode":"single","channel":{"name":"名称","type":1,"key":"[API_KEY_1]","base_url":"https://...","models":"model-a,model-b","group":"default","priority":0,"weight":0,"remark":"可选备注"}}}',
+      '测试渠道动作格式: {"action":"test_channel","target":"channel:12","channel_id":12,"risk":"low","requires_confirm":true,"reason":"原因","payload":{"model":"可选模型"}}。',
+      '更新备注动作格式: {"action":"update_channel","target":"channel:12","channel_id":12,"risk":"medium","requires_confirm":true,"reason":"原因","payload":{"remark":"备注内容"}}。',
+      '创建渠道必须有 base_url、key、models；如果缺字段，只追问，不要编造，也不要生成 create_channel。',
+      '模型名没有固定前缀，mimo-v2.5-pro、mimo-v2.5、provider/model、custom-001 都可能是合法模型。用户在“模型/支持模型/models”附近给出的逗号、顿号、空格分隔值都应视作模型列表。',
+      '输入里的密钥、Authorization、Cookie 会以 [API_KEY_1] 这类占位符出现；create_channel 的 payload.channel.key 必须使用密钥占位符，例如 [API_KEY_1]。',
+      '如果用户分多轮补充信息，你可以结合最近对话上下文生成完整动作；例如上一轮已有 [API_KEY_1] 和 base_url，本轮只补模型时，可以使用 [API_KEY_1]。',
+      '回复中要提醒用户到动作队列查看后端策略给出的最终状态。',
+    ].join('\n'),
   },
   aiExecution: {
     enabled: true,
@@ -296,6 +307,12 @@ export function normalizeOpsSettings(
         'customInstructions',
         defaults.prompt.customInstructions,
         5000
+      ),
+      assistantInstructions: readText(
+        prompt,
+        'assistantInstructions',
+        defaults.prompt.assistantInstructions,
+        12_000
       ),
     },
     aiExecution: {

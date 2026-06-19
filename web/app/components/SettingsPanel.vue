@@ -4,6 +4,7 @@ import {
   Activity,
   BarChart3,
   Brain,
+  Check,
   Edit3,
   Gauge,
   KeyRound,
@@ -17,6 +18,7 @@ import {
   Trash2,
   WalletCards,
   LogOut,
+  X,
 } from 'lucide-vue-next'
 
 import { clearStoredAuth } from '../api.js'
@@ -39,6 +41,8 @@ const emit = defineEmits([
   'fetchLlmModels',
 ])
 const activeSettingsTab = ref('execution')
+const promptEditorType = ref('')
+const promptEditorDraft = ref('')
 
 const permissionRows = computed(() => [
   {
@@ -135,12 +139,52 @@ const settingsTabs = computed(() => [
   },
 ])
 
+const promptEditorConfig = computed(() => {
+  if (promptEditorType.value === 'report') {
+    return {
+      path: 'prompt.customInstructions',
+      title: props.t('settings.prompt.customInstructions'),
+      hint: props.t('settings.prompt.reportHint'),
+      placeholder: props.t('settings.prompt.customPlaceholder'),
+    }
+  }
+
+  if (promptEditorType.value === 'assistant') {
+    return {
+      path: 'prompt.assistantInstructions',
+      title: props.t('settings.prompt.assistantInstructions'),
+      hint: props.t('settings.prompt.assistantHint'),
+      placeholder: props.t('settings.prompt.assistantPlaceholder'),
+    }
+  }
+
+  return null
+})
+
 function settingValue(path) {
   return path.split('.').reduce((value, key) => value?.[key], props.settings)
 }
 
 function update(path, value) {
   emit('updateSetting', path, value)
+}
+
+function openPromptEditor(type) {
+  promptEditorType.value = type
+  const config = promptEditorConfig.value
+  promptEditorDraft.value = config ? String(settingValue(config.path) || '') : ''
+}
+
+function closePromptEditor() {
+  promptEditorType.value = ''
+  promptEditorDraft.value = ''
+}
+
+function applyPromptEditor() {
+  const config = promptEditorConfig.value
+  if (!config) return
+  update(config.path, promptEditorDraft.value)
+  closePromptEditor()
 }
 
 function updateApiKey(value) {
@@ -433,14 +477,30 @@ function logout() {
               </table>
             </div>
 
-            <label class="settings-field prompt-custom-field">
-              <span>{{ t('settings.prompt.customInstructions') }}</span>
-              <textarea
-                :placeholder="t('settings.prompt.customPlaceholder')"
-                :value="settings.prompt.customInstructions"
-                @input="update('prompt.customInstructions', $event.target.value)"
-              ></textarea>
-            </label>
+            <div class="prompt-editor-launches">
+              <button
+                class="prompt-editor-button"
+                type="button"
+                @click="openPromptEditor('report')"
+              >
+                <Edit3 :size="18" />
+                <span>{{ t('settings.prompt.editReportPrompt') }}</span>
+              </button>
+
+              <button
+                class="prompt-editor-button"
+                type="button"
+                @click="openPromptEditor('assistant')"
+              >
+                <Brain :size="18" />
+                <span>{{ t('settings.prompt.editAssistantPrompt') }}</span>
+              </button>
+
+              <div class="settings-core-note">
+                <Lock :size="16" />
+                <span>{{ t('settings.prompt.coreSafetyHint') }}</span>
+              </div>
+            </div>
           </div>
 
           <div
@@ -467,13 +527,13 @@ function logout() {
                 <label class="settings-field">
                   <span>{{ t('settings.llm.model') }}</span>
                   <div class="settings-model-row">
-                    <input
-                      type="text"
-                      autocomplete="off"
-                      list="llm-model-options"
+                    <CustomSelect
+                      searchable
+                      allowCustom
+                      :modelValue="settings.llm.model"
+                      :options="llmModelOptions"
                       :placeholder="t('settings.llm.modelPlaceholder')"
-                      :value="settings.llm.model"
-                      @input="update('llm.model', $event.target.value)"
+                      @update:modelValue="update('llm.model', $event)"
                     />
                     <button
                       class="bento-btn icon-btn"
@@ -486,20 +546,11 @@ function logout() {
                       <RefreshCw :size="18" />
                     </button>
                   </div>
-                  <datalist id="llm-model-options">
-                    <option
-                      v-for="model in llmModelOptions"
-                      :key="model"
-                      :value="model"
-                    />
-                  </datalist>
-                  <small>
+                  <small v-if="llmModelsLoading || !llmModels.length">
                     {{
                       llmModelsLoading
                         ? t('settings.llm.fetchingModels')
-                        : llmModelOptions.length
-                          ? t('settings.llm.modelsLoaded', { count: llmModelOptions.length })
-                          : t('settings.llm.modelHint')
+                        : t('settings.llm.modelHint')
                     }}
                   </small>
                 </label>
@@ -561,6 +612,61 @@ function logout() {
 
         </div>
       </article>
+
+      <Teleport to="body">
+        <Transition name="toast-slide">
+          <div
+            v-if="promptEditorConfig"
+            class="prompt-editor-overlay"
+            role="dialog"
+            aria-modal="true"
+            :aria-label="promptEditorConfig.title"
+          >
+            <section class="prompt-editor-dialog">
+              <header class="prompt-editor-header">
+                <div>
+                  <h3>{{ promptEditorConfig.title }}</h3>
+                  <p>{{ promptEditorConfig.hint }}</p>
+                </div>
+                <button
+                  class="bento-btn icon-btn"
+                  type="button"
+                  :aria-label="t('common.close')"
+                  :title="t('common.close')"
+                  @click="closePromptEditor"
+                >
+                  <X :size="18" />
+                </button>
+              </header>
+
+              <textarea
+                v-model="promptEditorDraft"
+                class="prompt-editor-textarea"
+                :placeholder="promptEditorConfig.placeholder"
+              ></textarea>
+
+              <footer class="prompt-editor-actions">
+                <button
+                  class="bento-btn"
+                  type="button"
+                  @click="closePromptEditor"
+                >
+                  <X :size="16" />
+                  <span>{{ t('common.cancel') }}</span>
+                </button>
+                <button
+                  class="bento-btn primary"
+                  type="button"
+                  @click="applyPromptEditor"
+                >
+                  <Check :size="16" />
+                  <span>{{ t('common.done') }}</span>
+                </button>
+              </footer>
+            </section>
+          </div>
+        </Transition>
+      </Teleport>
     </template>
   </div>
 </template>

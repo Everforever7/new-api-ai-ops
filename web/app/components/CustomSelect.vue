@@ -1,25 +1,102 @@
 <script setup>
-import { ref, onMounted, onUnmounted } from 'vue'
+import { computed, nextTick, ref, onMounted, onUnmounted, watch } from 'vue'
 import { ChevronDown } from 'lucide-vue-next'
 
 const props = defineProps({
   modelValue: { type: [String, Number], required: true },
-  options: { type: Array, required: true } // Array of { value, label }
+  options: { type: Array, required: true }, // Array of { value, label }
+  placeholder: { type: String, default: '' },
+  searchable: { type: Boolean, default: false },
+  allowCustom: { type: Boolean, default: false },
 })
 
 const emit = defineEmits(['update:modelValue', 'change'])
 
 const isOpen = ref(false)
 const selectRef = ref(null)
+const inputRef = ref(null)
+const inputValue = ref(String(props.modelValue ?? ''))
+
+const normalizedOptions = computed(() =>
+  props.options.map((option) => {
+    if (option && typeof option === 'object') {
+      const value = option.value
+      return {
+        value,
+        label: option.label ?? String(value ?? ''),
+      }
+    }
+
+    return {
+      value: option,
+      label: String(option ?? ''),
+    }
+  })
+)
+
+const selectedOption = computed(() =>
+  normalizedOptions.value.find(
+    (option) => String(option.value) === String(props.modelValue)
+  )
+)
+
+const displayValue = computed(() =>
+  selectedOption.value?.label || String(props.modelValue ?? '') || props.placeholder
+)
+
+const visibleOptions = computed(() => {
+  if (!props.searchable) return normalizedOptions.value
+
+  const query = inputValue.value.trim().toLowerCase()
+  if (!query) return normalizedOptions.value
+
+  return normalizedOptions.value.filter((option) =>
+    `${option.label} ${option.value}`.toLowerCase().includes(query)
+  )
+})
+
+watch(
+  () => props.modelValue,
+  (value) => {
+    const next = String(value ?? '')
+    if (next !== inputValue.value) inputValue.value = next
+  }
+)
 
 function toggle() {
   isOpen.value = !isOpen.value
+  if (isOpen.value && props.searchable) focusInput()
+}
+
+function open() {
+  isOpen.value = true
+}
+
+function focusInput() {
+  nextTick(() => {
+    inputRef.value?.focus()
+  })
+}
+
+function updateValue(value) {
+  emit('update:modelValue', value)
+  emit('change', value)
 }
 
 function selectOption(option) {
-  emit('update:modelValue', option.value)
-  emit('change', option.value)
+  inputValue.value = String(option.value ?? '')
+  updateValue(option.value)
   isOpen.value = false
+}
+
+function handleInput(event) {
+  const value = event.target.value
+  inputValue.value = value
+  isOpen.value = true
+
+  if (props.allowCustom) {
+    updateValue(value)
+  }
 }
 
 function handleClickOutside(event) {
@@ -39,14 +116,46 @@ onUnmounted(() => {
 
 <template>
   <div class="custom-select" ref="selectRef">
-    <button type="button" class="select-trigger" @click="toggle" :class="{ open: isOpen }">
-      <span>{{ options.find(o => o.value === modelValue)?.label || modelValue }}</span>
+    <button
+      v-if="!searchable"
+      type="button"
+      class="select-trigger"
+      @click="toggle"
+      :class="{ open: isOpen }"
+    >
+      <span class="select-value">{{ displayValue }}</span>
       <ChevronDown :size="16" class="select-icon" />
     </button>
+    <div
+      v-else
+      class="select-trigger select-trigger-input"
+      :class="{ open: isOpen }"
+      @click="open"
+    >
+      <input
+        ref="inputRef"
+        class="select-input"
+        type="text"
+        autocomplete="off"
+        :placeholder="placeholder"
+        :value="inputValue"
+        @input="handleInput"
+        @focus="open"
+        @keydown.esc.prevent="isOpen = false"
+      />
+      <button
+        type="button"
+        class="select-icon-button"
+        :aria-label="placeholder"
+        @click.stop="toggle"
+      >
+        <ChevronDown :size="16" class="select-icon" />
+      </button>
+    </div>
     <Transition name="dropdown-fade">
-      <div v-if="isOpen" class="select-dropdown">
+      <div v-if="isOpen && visibleOptions.length" class="select-dropdown">
         <button
-          v-for="option in options"
+          v-for="option in visibleOptions"
           :key="option.value"
           type="button"
           class="select-option"

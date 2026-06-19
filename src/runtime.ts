@@ -14,10 +14,28 @@ import {
   type OpsAction,
 } from './actions'
 import {
+  createAssistantMessage,
   planAssistantTurn,
+  planAssistantResponse,
+  prepareAssistantTurn,
   type AssistantSecret,
   type AssistantMessage,
 } from './assistant'
+
+export type AssistantStreamOptions = {
+  userMessageId?: string
+  assistantMessageId?: string
+}
+
+export type AssistantStreamEvent =
+  | { type: 'message'; message: AssistantMessage }
+  | { type: 'delta'; id: string; delta: string }
+  | {
+      type: 'done'
+      session: ReturnType<OpsRuntime['getAssistantSession']> & {
+        missingFields?: string[]
+      }
+    }
 
 export type RunReportOptions = {
   dryRun?: boolean
@@ -107,6 +125,79 @@ export class OpsRuntime {
       ...this.getAssistantSession(),
       missingFields: plan.missingFields,
     }
+  }
+
+  async streamAssistantMessage(
+    input: string,
+    options: AssistantStreamOptions,
+    emit: (event: AssistantStreamEvent) => void | Promise<void>
+  ) {
+    const message = input.trim()
+    if (!message) {
+      throw new Error('assistant message is empty')
+    }
+
+    const history = this.assistantMessages
+    const prepared = prepareAssistantTurn(
+      message,
+      this.assistantSecrets,
+      { userMessageId: options.userMessageId }
+    )
+    const assistantMessage = createAssistantMessage(
+      'assistant',
+      '',
+      options.assistantMessageId
+    )
+
+    this.assistantLastActions = []
+    this.assistantMessages = [
+      ...this.assistantMessages,
+      prepared.userMessage,
+      assistantMessage,
+    ].slice(-80)
+    this.assistantUpdatedAt = new Date().toISOString()
+
+    await emit({ type: 'message', message: prepared.userMessage })
+    await emit({ type: 'message', message: assistantMessage })
+
+    const updateAssistantContent = (content: string) => {
+      this.assistantMessages = this.assistantMessages.map((item) =>
+        item.id === assistantMessage.id
+          ? { ...item, content }
+          : item
+      )
+    }
+
+    let streamedContent = ''
+    const plan = await planAssistantResponse(
+      this.config,
+      history,
+      prepared,
+      {
+        assistantMessage,
+        onReplyDelta: async (delta) => {
+          streamedContent += delta
+          updateAssistantContent(streamedContent)
+          await emit({ type: 'delta', id: assistantMessage.id, delta })
+        },
+      }
+    )
+    const drafts = await buildAssistantActionDrafts(this.config, plan.rawActions)
+
+    this.assistantSecrets = plan.secrets
+    this.actions = [...drafts, ...this.actions]
+    this.assistantLastActions = drafts
+    updateAssistantContent(plan.assistantMessage.content)
+    this.assistantUpdatedAt = new Date().toISOString()
+
+    await emit({ type: 'message', message: plan.assistantMessage })
+
+    const session = {
+      ...this.getAssistantSession(),
+      missingFields: plan.missingFields,
+    }
+    await emit({ type: 'done', session })
+    return session
   }
 
   async executeAction(actionId: string) {
