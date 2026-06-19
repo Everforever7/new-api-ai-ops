@@ -22,7 +22,12 @@ export async function generateOpsReport(
 ) {
   const settings = await loadOpsSettings()
   const promptOptions = {
+    includeChannelSummary: settings.prompt.includeChannelSummary,
+    includeErrors: settings.prompt.includeErrors,
+    includeModels: settings.prompt.includeModels,
+    includeLatency: settings.prompt.includeLatency,
     includeBalance: settings.prompt.includeBalance,
+    customInstructions: settings.prompt.customInstructions,
   }
 
   if (!config.llm.apiKey) {

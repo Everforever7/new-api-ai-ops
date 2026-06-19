@@ -1,5 +1,5 @@
 <script setup>
-import { computed, onMounted, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import {
   Layers3,
   LayoutDashboard,
@@ -9,10 +9,12 @@ import {
   Bot,
 } from 'lucide-vue-next'
 import {
+  clearStoredAuth,
   executeAction as requestExecuteAction,
   getChannels,
   getActions,
   getSettings,
+  getStoredAuth,
   rejectAction as requestRejectAction,
   getStatus,
   runCheck as requestRunCheck,
@@ -21,6 +23,7 @@ import {
 import { LANGUAGES, resolveLocale, translate } from './i18n.js'
 
 // Import Sub-components
+import LoginPanel from './components/LoginPanel.vue'
 import FloatingDock from './components/FloatingDock.vue'
 import BentoDashboard from './components/BentoDashboard.vue'
 import ReportPanel from './components/ReportPanel.vue'
@@ -38,6 +41,7 @@ const themeOptions = ['light', 'dark']
 
 const locale = ref(resolveLocale(readStoredValue(STORAGE_KEYS.locale)))
 const theme = ref(resolveTheme(readStoredValue(STORAGE_KEYS.theme)))
+const isLoggedIn = ref(false)
 const activeTab = ref('dashboard')
 const status = ref(null)
 const channels = ref([])
@@ -246,11 +250,13 @@ function formatLatency(value) {
 }
 
 // API ACTIONS
-async function refreshAll() {
+async function refreshAll(options = {}) {
+  const { initialStatus = null } = options
   refreshing.value = true
   try {
+    const statusRequest = initialStatus ? Promise.resolve(initialStatus) : getStatus()
     const [statusResult, channelsResult] = await Promise.allSettled([
-      getStatus(),
+      statusRequest,
       getChannels(),
     ])
 
@@ -351,16 +357,67 @@ async function saveSettings() {
   }
 }
 
-onMounted(() => {
-  refreshAll()
+async function checkAuth() {
+  if (!getStoredAuth()) {
+    isLoggedIn.value = false
+    return
+  }
+  try {
+    const authenticatedStatus = await getStatus()
+    isLoggedIn.value = true
+    loadInitialData(authenticatedStatus)
+  } catch (error) {
+    // 401 will trigger the auth:unauthorized event
+  }
+}
+
+function loadInitialData(initialStatus = null) {
+  refreshAll({ initialStatus })
   loadSettings()
   loadActions()
+}
+
+function resetAuthenticatedState() {
+  status.value = null
+  channels.value = []
+  settings.value = null
+  actions.value = []
+  errorToasts.value = []
+  settingsSavedAt.value = ''
+  refreshing.value = false
+  runningCheck.value = false
+  settingsLoading.value = false
+  settingsSaving.value = false
+  actionsLoading.value = false
+  executingActionIds.value = []
+}
+
+function handleUnauthorized() {
+  clearStoredAuth()
+  isLoggedIn.value = false
+  resetAuthenticatedState()
+}
+
+function onLoginSuccess(authenticatedStatus) {
+  isLoggedIn.value = true
+  loadInitialData(authenticatedStatus)
+}
+
+onMounted(() => {
+  window.addEventListener('auth:unauthorized', handleUnauthorized)
+  checkAuth()
+})
+
+onBeforeUnmount(() => {
+  window.removeEventListener('auth:unauthorized', handleUnauthorized)
 })
 </script>
 
 <template>
-  <div class="bento-app">
-    
+  <LoginPanel v-if="!isLoggedIn" @loginSuccess="onLoginSuccess" :t="t" />
+
+  <div class="bento-app" v-else>
+    <div class="background-mesh"></div>
     <header class="floating-brand">
       <div class="brand-mark"><Layers3 :size="24" /></div>
       <h1>{{ t('app.title') }}</h1>

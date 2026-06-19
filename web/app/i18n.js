@@ -130,6 +130,9 @@ const dictionaries = {
       globalState: '策略生效后仍会先匹配保护规则',
       on: '开启',
       off: '关闭',
+      execution: {
+        title: 'AI 执行控制',
+      },
       confirmation: {
         auto: '自动执行',
         confirm: '每次确认',
@@ -148,8 +151,26 @@ const dictionaries = {
       },
       prompt: {
         title: '提示词内容',
+        part: '内容部分',
+        include: '纳入',
         includeBalance: '把余额纳入 AI 提示词',
         includeBalanceHint: '余额当前可能不准确；关闭后仍会在面板展示，但 AI 不会基于余额分析或建议。',
+        customInstructions: '自定义插入提示词',
+        customPlaceholder: '例如：优先关注连续失败、不要建议删除渠道、报告中标出需要人工确认的原因。',
+        parts: {
+          channelSummary: '渠道概况',
+          errors: '错误日志',
+          models: '模型统计',
+          latency: '响应延迟',
+          balance: '余额信息',
+        },
+        hints: {
+          channelSummary: '总数、启用、禁用、自动禁用等状态汇总',
+          errors: '请求量、失败率、高错误渠道和错误样例',
+          models: '模型调用量与错误量排行',
+          latency: '响应时间最慢的渠道',
+          balance: '低余额渠道；余额可能不准确，默认不纳入',
+        },
       },
       safety: {
         title: '执行阈值',
@@ -166,6 +187,16 @@ const dictionaries = {
         models: '模型包含',
         types: '渠道类型',
       },
+    },
+    login: {
+      title: '欢迎回来',
+      subtitle: '请登录以访问控制面板',
+      username: '用户名',
+      password: '密码',
+      submit: '立即登录',
+      logout: '退出登录',
+      errorEmpty: '必须填写用户名和密码',
+      errorInvalid: '用户名或密码不正确',
     },
   },
   'en-US': {
@@ -292,6 +323,9 @@ const dictionaries = {
       globalState: 'Protection rules are still checked first',
       on: 'On',
       off: 'Off',
+      execution: {
+        title: 'AI Execution Control',
+      },
       confirmation: {
         auto: 'Automatic',
         confirm: 'Confirm each time',
@@ -310,8 +344,26 @@ const dictionaries = {
       },
       prompt: {
         title: 'Prompt content',
+        part: 'Section',
+        include: 'Include',
         includeBalance: 'Include balance in AI prompt',
         includeBalanceHint: 'Balance may be inaccurate right now; when off, it stays visible in the panel but AI will not analyze or suggest from it.',
+        customInstructions: 'Custom inserted prompt',
+        customPlaceholder: 'Example: prioritize repeated failures, do not suggest deleting channels, explain why manual confirmation is needed.',
+        parts: {
+          channelSummary: 'Channel summary',
+          errors: 'Error logs',
+          models: 'Model statistics',
+          latency: 'Latency',
+          balance: 'Balance',
+        },
+        hints: {
+          channelSummary: 'Totals, enabled, disabled, and auto-disabled counts',
+          errors: 'Request volume, failure rate, top error channels, and samples',
+          models: 'Model usage and error ranking',
+          latency: 'Slowest responding channels',
+          balance: 'Low-balance channels; may be inaccurate and is off by default',
+        },
       },
       safety: {
         title: 'Execution limits',
@@ -328,6 +380,16 @@ const dictionaries = {
         models: 'Model includes',
         types: 'Channel types',
       },
+    },
+    login: {
+      title: 'Welcome Back',
+      subtitle: 'Sign in to access the control panel',
+      username: 'Username',
+      password: 'Password',
+      submit: 'Sign In',
+      logout: 'Logout',
+      errorEmpty: 'Username and password required',
+      errorInvalid: 'Invalid credentials',
     },
   },
 }

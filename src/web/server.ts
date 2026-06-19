@@ -38,7 +38,9 @@ function jsonError(message: string, status = 500) {
 function parseBasicAuth(header: string | null) {
   if (!header?.startsWith('Basic ')) return undefined
   try {
-    const decoded = atob(header.slice('Basic '.length))
+    const encoded = atob(header.slice('Basic '.length))
+    const bytes = Uint8Array.from(encoded, (char) => char.charCodeAt(0))
+    const decoded = new TextDecoder().decode(bytes)
     const index = decoded.indexOf(':')
     if (index < 0) return undefined
     return {
@@ -61,9 +63,6 @@ function isAuthorized(req: Request, config: AppConfig) {
 function unauthorized() {
   return new Response('Authentication required', {
     status: 401,
-    headers: {
-      'WWW-Authenticate': 'Basic realm="new-api-ai-ops"',
-    },
   })
 }
 
@@ -232,11 +231,10 @@ export function startPanelServer(config: AppConfig, runtime: OpsRuntime) {
         return new Response('ok')
       }
 
-      if (!isAuthorized(req, config)) {
-        return unauthorized()
-      }
-
       if (url.pathname.startsWith('/api/')) {
+        if (!isAuthorized(req, config)) {
+          return unauthorized()
+        }
         return handleApi(req, url, config, runtime)
       }
 

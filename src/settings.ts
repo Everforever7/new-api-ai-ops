@@ -6,7 +6,12 @@ export type ConfirmationStrategy = 'auto' | 'confirm' | 'never'
 export type OpsSettings = {
   version: 1
   prompt: {
+    includeChannelSummary: boolean
+    includeErrors: boolean
+    includeModels: boolean
+    includeLatency: boolean
     includeBalance: boolean
+    customInstructions: string
   }
   aiExecution: {
     enabled: boolean
@@ -45,7 +50,12 @@ const SETTINGS_PATH = process.env.AI_OPS_SETTINGS_PATH?.trim() || 'data/settings
 const DEFAULT_SETTINGS: OpsSettings = {
   version: 1,
   prompt: {
+    includeChannelSummary: true,
+    includeErrors: true,
+    includeModels: true,
+    includeLatency: true,
     includeBalance: false,
+    customInstructions: '',
   },
   aiExecution: {
     enabled: true,
@@ -125,6 +135,17 @@ function readStrategy(
     : fallback
 }
 
+function readText(
+  source: Record<string, unknown>,
+  key: string,
+  fallback: string,
+  maxLength: number
+) {
+  const value = source[key]
+  if (typeof value !== 'string') return fallback
+  return value.trim().slice(0, maxLength)
+}
+
 function readStringArray(
   source: Record<string, unknown>,
   key: string,
@@ -180,10 +201,36 @@ export function normalizeOpsSettings(input: unknown): OpsSettings {
   return {
     version: 1,
     prompt: {
+      includeChannelSummary: readBoolean(
+        prompt,
+        'includeChannelSummary',
+        defaults.prompt.includeChannelSummary
+      ),
+      includeErrors: readBoolean(
+        prompt,
+        'includeErrors',
+        defaults.prompt.includeErrors
+      ),
+      includeModels: readBoolean(
+        prompt,
+        'includeModels',
+        defaults.prompt.includeModels
+      ),
+      includeLatency: readBoolean(
+        prompt,
+        'includeLatency',
+        defaults.prompt.includeLatency
+      ),
       includeBalance: readBoolean(
         prompt,
         'includeBalance',
         defaults.prompt.includeBalance
+      ),
+      customInstructions: readText(
+        prompt,
+        'customInstructions',
+        defaults.prompt.customInstructions,
+        5000
       ),
     },
     aiExecution: {

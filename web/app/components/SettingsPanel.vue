@@ -2,8 +2,11 @@
 import { computed } from 'vue'
 import {
   Activity,
+  BarChart3,
   Brain,
   Edit3,
+  Gauge,
+  ListChecks,
   Lock,
   PlusCircle,
   RefreshCw,
@@ -11,8 +14,11 @@ import {
   ShieldCheck,
   SlidersHorizontal,
   Trash2,
+  WalletCards,
+  LogOut,
 } from 'lucide-vue-next'
 
+import { clearStoredAuth } from '../api.js'
 import CustomSelect from './CustomSelect.vue'
 
 const props = defineProps({
@@ -53,6 +59,39 @@ const permissionRows = computed(() => [
   },
 ])
 
+const promptRows = computed(() => [
+  {
+    key: 'includeChannelSummary',
+    icon: ListChecks,
+    title: props.t('settings.prompt.parts.channelSummary'),
+    hint: props.t('settings.prompt.hints.channelSummary'),
+  },
+  {
+    key: 'includeErrors',
+    icon: Activity,
+    title: props.t('settings.prompt.parts.errors'),
+    hint: props.t('settings.prompt.hints.errors'),
+  },
+  {
+    key: 'includeModels',
+    icon: BarChart3,
+    title: props.t('settings.prompt.parts.models'),
+    hint: props.t('settings.prompt.hints.models'),
+  },
+  {
+    key: 'includeLatency',
+    icon: Gauge,
+    title: props.t('settings.prompt.parts.latency'),
+    hint: props.t('settings.prompt.hints.latency'),
+  },
+  {
+    key: 'includeBalance',
+    icon: WalletCards,
+    title: props.t('settings.prompt.parts.balance'),
+    hint: props.t('settings.prompt.hints.balance'),
+  },
+])
+
 const confirmationOptions = computed(() => [
   { value: 'auto', label: props.t('settings.confirmation.auto') },
   { value: 'confirm', label: props.t('settings.confirmation.confirm') },
@@ -84,6 +123,11 @@ function updateList(path, text, type = 'string') {
       : [...new Set(parts)]
 
   update(path, value)
+}
+
+function logout() {
+  clearStoredAuth()
+  window.dispatchEvent(new Event('auth:unauthorized'))
 }
 </script>
 
@@ -126,6 +170,13 @@ function updateList(path, text, type = 'string') {
               <RefreshCw :size="18" />
             </button>
             <button
+              class="bento-btn danger compact"
+              @click="logout"
+            >
+              <LogOut :size="18" />
+              <span>{{ t('login.logout') || '退出登录' }}</span>
+            </button>
+            <button
               class="bento-btn primary"
               type="button"
               :disabled="saving"
@@ -138,165 +189,209 @@ function updateList(path, text, type = 'string') {
         </div>
       </article>
 
-      <article class="bento-item high-density">
-        <div class="bento-flex-row">
-          <div class="bento-icon-wrapper">
-            <ShieldCheck :size="28" />
-          </div>
-          <div class="settings-inline-main">
-            <div class="bento-label">{{ t('settings.globalSwitch') }}</div>
-            <div class="bento-sub">{{ t('settings.globalState') }}</div>
-          </div>
-          <button
-            class="setting-switch"
-            :class="{ active: settings.aiExecution.enabled }"
-            type="button"
-            :aria-pressed="settings.aiExecution.enabled"
-            @click="update('aiExecution.enabled', !settings.aiExecution.enabled)"
-          >
-            {{
-              settings.aiExecution.enabled
-                ? t('settings.on')
-                : t('settings.off')
-            }}
-          </button>
-        </div>
-      </article>
-
-      <article class="bento-item high-density">
-        <div class="bento-flex-row">
-          <div class="bento-icon-wrapper">
-            <Brain :size="28" />
-          </div>
-          <div class="settings-inline-main">
-            <div class="bento-label">{{ t('settings.prompt.includeBalance') }}</div>
-            <div class="bento-sub">{{ t('settings.prompt.includeBalanceHint') }}</div>
-          </div>
-          <button
-            class="setting-switch"
-            :class="{ active: settings.prompt.includeBalance }"
-            type="button"
-            :aria-pressed="settings.prompt.includeBalance"
-            @click="update('prompt.includeBalance', !settings.prompt.includeBalance)"
-          >
-            {{
-              settings.prompt.includeBalance
-                ? t('settings.on')
-                : t('settings.off')
-            }}
-          </button>
-        </div>
-      </article>
-
-      <article class="bento-item high-density">
+      <article class="bento-item bento-full settings-execution high-density">
         <div class="bento-header">
           <div class="bento-icon-wrapper">
-            <SlidersHorizontal :size="24" />
+            <ShieldCheck :size="24" />
           </div>
-          <h3>{{ t('settings.safety.title') }}</h3>
+          <h3>{{ t('settings.execution.title') }}</h3>
         </div>
-        <div class="settings-number-grid">
-          <label class="settings-field">
-            <span>{{ t('settings.safety.minRequests') }}</span>
-            <input
-              type="number"
-              min="0"
-              :value="settings.aiExecution.safety.minRequestsForActions"
-              @input="
-                update(
-                  'aiExecution.safety.minRequestsForActions',
-                  Number($event.target.value)
-                )
-              "
-            />
-          </label>
-          <label class="settings-field">
-            <span>{{ t('settings.safety.maxActions') }}</span>
-            <input
-              type="number"
-              min="0"
-              :value="settings.aiExecution.safety.maxActionsPerRun"
-              @input="
-                update(
-                  'aiExecution.safety.maxActionsPerRun',
-                  Number($event.target.value)
-                )
-              "
-            />
-          </label>
-          <label class="settings-field">
-            <span>{{ t('settings.safety.cooldown') }}</span>
-            <input
-              type="number"
-              min="0"
-              :value="settings.aiExecution.safety.channelCooldownMinutes"
-              @input="
-                update(
-                  'aiExecution.safety.channelCooldownMinutes',
-                  Number($event.target.value)
-                )
-              "
-            />
-          </label>
+
+        <div class="settings-stack">
+          <div class="settings-control-row">
+            <div class="settings-inline-main">
+              <div class="bento-label">{{ t('settings.globalSwitch') }}</div>
+              <div class="bento-sub">{{ t('settings.globalState') }}</div>
+            </div>
+            <button
+              class="setting-switch"
+              :class="{ active: settings.aiExecution.enabled }"
+              type="button"
+              :aria-pressed="settings.aiExecution.enabled"
+              @click="update('aiExecution.enabled', !settings.aiExecution.enabled)"
+            >
+              {{
+                settings.aiExecution.enabled
+                  ? t('settings.on')
+                  : t('settings.off')
+              }}
+            </button>
+          </div>
+
+          <div class="settings-section">
+            <div class="settings-section-title">
+              <SlidersHorizontal :size="18" />
+              <span>{{ t('settings.safety.title') }}</span>
+            </div>
+            <div class="settings-number-grid">
+              <label class="settings-field">
+                <span>{{ t('settings.safety.minRequests') }}</span>
+                <input
+                  type="number"
+                  min="0"
+                  :value="settings.aiExecution.safety.minRequestsForActions"
+                  @input="
+                    update(
+                      'aiExecution.safety.minRequestsForActions',
+                      Number($event.target.value)
+                    )
+                  "
+                />
+              </label>
+              <label class="settings-field">
+                <span>{{ t('settings.safety.maxActions') }}</span>
+                <input
+                  type="number"
+                  min="0"
+                  :value="settings.aiExecution.safety.maxActionsPerRun"
+                  @input="
+                    update(
+                      'aiExecution.safety.maxActionsPerRun',
+                      Number($event.target.value)
+                    )
+                  "
+                />
+              </label>
+              <label class="settings-field">
+                <span>{{ t('settings.safety.cooldown') }}</span>
+                <input
+                  type="number"
+                  min="0"
+                  :value="settings.aiExecution.safety.channelCooldownMinutes"
+                  @input="
+                    update(
+                      'aiExecution.safety.channelCooldownMinutes',
+                      Number($event.target.value)
+                    )
+                  "
+                />
+              </label>
+            </div>
+          </div>
+
+          <div class="settings-section">
+            <div class="settings-section-title">
+              <Activity :size="18" />
+              <span>{{ t('settings.permissions.title') }}</span>
+            </div>
+            <div class="bento-table-wrap">
+              <table class="settings-table">
+                <thead>
+                  <tr>
+                    <th>{{ t('settings.permissions.action') }}</th>
+                    <th>{{ t('settings.permissions.allowed') }}</th>
+                    <th>{{ t('settings.permissions.strategy') }}</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr v-for="row in permissionRows" :key="row.key">
+                    <td>
+                      <div class="permission-name">
+                        <component :is="row.icon" :size="18" />
+                        <span>{{ row.title }}</span>
+                      </div>
+                    </td>
+                    <td>
+                      <button
+                        class="setting-switch small"
+                        :class="{ active: settingValue(`aiExecution.permissions.${row.key}`) }"
+                        type="button"
+                        :aria-pressed="settingValue(`aiExecution.permissions.${row.key}`)"
+                        @click="
+                          update(
+                            `aiExecution.permissions.${row.key}`,
+                            !settingValue(`aiExecution.permissions.${row.key}`)
+                          )
+                        "
+                      >
+                        {{
+                          settingValue(`aiExecution.permissions.${row.key}`)
+                            ? t('settings.on')
+                            : t('settings.off')
+                        }}
+                      </button>
+                    </td>
+                    <td>
+                      <CustomSelect
+                        :modelValue="settingValue(`aiExecution.confirmation.${row.key}`)"
+                        :options="confirmationOptions"
+                        @change="
+                          update(
+                            `aiExecution.confirmation.${row.key}`,
+                            $event
+                          )
+                        "
+                      />
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
         </div>
       </article>
 
-      <article class="bento-item bento-full settings-matrix high-density">
+      <article class="bento-item bento-full settings-prompt high-density">
         <div class="bento-header">
-          <h3>{{ t('settings.permissions.title') }}</h3>
+          <div class="bento-icon-wrapper">
+            <Brain :size="24" />
+          </div>
+          <h3>{{ t('settings.prompt.title') }}</h3>
         </div>
+
+        <div class="settings-stack">
         <div class="bento-table-wrap">
           <table class="settings-table">
             <thead>
               <tr>
-                <th>{{ t('settings.permissions.action') }}</th>
-                <th>{{ t('settings.permissions.allowed') }}</th>
-                <th>{{ t('settings.permissions.strategy') }}</th>
+                <th>{{ t('settings.prompt.part') }}</th>
+                <th>{{ t('settings.prompt.include') }}</th>
               </tr>
             </thead>
             <tbody>
-              <tr v-for="row in permissionRows" :key="row.key">
+              <tr v-for="row in promptRows" :key="row.key">
                 <td>
-                  <div class="permission-name">
+                  <div class="permission-name prompt-name">
                     <component :is="row.icon" :size="18" />
-                    <span>{{ row.title }}</span>
+                    <span>
+                      <strong>{{ row.title }}</strong>
+                      <small>{{ row.hint }}</small>
+                    </span>
                   </div>
                 </td>
                 <td>
                   <button
                     class="setting-switch small"
-                    :class="{ active: settingValue(`aiExecution.permissions.${row.key}`) }"
+                    :class="{ active: settingValue(`prompt.${row.key}`) }"
                     type="button"
-                    :aria-pressed="settingValue(`aiExecution.permissions.${row.key}`)"
+                    :aria-pressed="settingValue(`prompt.${row.key}`)"
                     @click="
                       update(
-                        `aiExecution.permissions.${row.key}`,
-                        !settingValue(`aiExecution.permissions.${row.key}`)
+                        `prompt.${row.key}`,
+                        !settingValue(`prompt.${row.key}`)
                       )
                     "
                   >
                     {{
-                      settingValue(`aiExecution.permissions.${row.key}`)
+                      settingValue(`prompt.${row.key}`)
                         ? t('settings.on')
                         : t('settings.off')
                     }}
                   </button>
                 </td>
-                <td>
-                  <CustomSelect
-                    :modelValue="settingValue(`aiExecution.confirmation.${row.key}`)"
-                    :options="confirmationOptions"
-                    @change="
-                      update(
-                        `aiExecution.confirmation.${row.key}`,
-                        $event
-                      )
-                    "
-                  />
-                </td>
               </tr>
             </tbody>
           </table>
+        </div>
+
+          <label class="settings-field prompt-custom-field">
+            <span>{{ t('settings.prompt.customInstructions') }}</span>
+            <textarea
+              :placeholder="t('settings.prompt.customPlaceholder')"
+              :value="settings.prompt.customInstructions"
+              @input="update('prompt.customInstructions', $event.target.value)"
+            ></textarea>
+          </label>
         </div>
       </article>
 

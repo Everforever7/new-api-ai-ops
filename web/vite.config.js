@@ -13,15 +13,6 @@ export default defineConfig(({ mode }) => {
   const panelPort = Number(env.PANEL_PORT || 8787)
   const webPort = Number(env.WEB_PORT || 5173)
   const webHost = env.WEB_HOST || '127.0.0.1'
-  const panelUsername = env.PANEL_USERNAME || 'admin'
-  const panelPassword = env.PANEL_PASSWORD
-  const proxyHeaders = panelPassword
-    ? {
-        Authorization: `Basic ${Buffer.from(`${panelUsername}:${panelPassword}`).toString(
-          'base64'
-        )}`,
-      }
-    : undefined
 
   return {
     root: webRoot,
@@ -33,7 +24,6 @@ export default defineConfig(({ mode }) => {
         '/api': {
           target: `http://127.0.0.1:${panelPort}`,
           changeOrigin: true,
-          headers: proxyHeaders,
         },
         '/healthz': {
           target: `http://127.0.0.1:${panelPort}`,
