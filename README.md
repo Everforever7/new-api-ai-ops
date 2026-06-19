@@ -1,76 +1,110 @@
-# new-api-ai-ops
+<div align="center">
 
-Sidecar AI operations assistant for `new-api`.
+# 🤖 New API AI Ops
 
-This project stays outside the main `new-api` repository. It reads status from `new-api`, asks an OpenAI-compatible model for an operations report, and optionally sends the report to Discord.
+**为 [new-api](https://github.com/Calcium-Ion/new-api) 打造的 AI 智能运维助手**
 
-## First Milestone
+[![Docker Image](https://img.shields.io/badge/GHCR-ghcr.io/everforever7/new--api--ai--ops-blue?logo=docker)](https://ghcr.io/everforever7/new-api-ai-ops)
+[![Bun](https://img.shields.io/badge/Runtime-Bun-f9f1e1?logo=bun)](https://bun.sh)
+[![Vue 3](https://img.shields.io/badge/Frontend-Vue%203-4FC08D?logo=vuedotjs)](https://vuejs.org)
+[![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 
-- Collect channels from `/api/channel`.
-- Collect recent common logs from `/api/log`.
-- Collect recent log stats from `/api/log/stat`.
-- Build a health snapshot.
-- Generate a Chinese Markdown report with an LLM.
-- Send the report to Discord through a webhook.
-- Save local report copies under `reports/`.
-- Expose a lightweight Basic Auth management panel.
-- Do not modify channels automatically.
+[English](./README_EN.md) | 简体中文
 
-## Setup
+</div>
+
+---
+
+## 📖 简介
+
+New API AI Ops 是一个独立的 Sidecar 运维助手，专为 `new-api` 设计。它从 `new-api` 的管理 API 采集渠道状态和调用日志，借助 OpenAI 兼容大模型自动生成运维巡检报告，并可将报告推送至 Discord Webhook。
+
+> **当前版本为只读模式** — 只生成报告，不会自动修改渠道配置。
+
+## ✨ 功能特性
+
+- 📊 **自动采集** — 从 `/api/channel`、`/api/log`、`/api/log/stat` 获取渠道与日志数据
+- 🧠 **AI 分析** — 调用 LLM 生成中文 Markdown 运维巡检报告
+- 💬 **Discord 推送** — 通过 Webhook 自动将报告发送至 Discord 频道
+- 💾 **报告存档** — 所有报告自动保存至 `reports/` 目录
+- 🖥️ **管理面板** — 内置轻量级 Web 管理面板（Basic Auth 认证）
+- ⏰ **定时调度** — 支持可配置间隔的定时巡检
+- 🐳 **Docker 部署** — 提供 GHCR 镜像，可直接与 `new-api` 同栈部署
+
+## 🏗️ 技术栈
+
+| 层级 | 技术 |
+|------|------|
+| 运行时 | [Bun](https://bun.sh) |
+| 语言 | TypeScript |
+| 前端 | Vue 3 + Vite |
+| 图标 | Lucide Icons |
+| 容器 | Docker (Alpine) |
+| CI/CD | GitHub Actions → GHCR |
+
+## 🚀 快速开始
+
+### 前置要求
+
+- [Bun](https://bun.sh) v1.3+
+- 一个正在运行的 `new-api` 实例
+- 一个 OpenAI 兼容的 LLM API
+
+### 安装
 
 ```bash
-cd E:\new-api-ai-ops
+git clone https://github.com/Everforever7/new-api-ai-ops.git
+cd new-api-ai-ops
 bun install
-copy .env.example .env
+cp .env.example .env
 ```
 
-Then edit `.env`.
+### 配置
 
-For local testing, `NEWAPI_COOKIE` is the most reliable option: log in to your
-`new-api` dashboard as an admin, copy the dashboard request Cookie header, and
-paste the full cookie string.
-
-For Docker deployment, you can use `NEWAPI_USERNAME` and `NEWAPI_PASSWORD`
-instead. The sidecar logs in through `/api/user/login` and keeps the session
-cookie in memory. It also reads the login response user id and sends it as the
-`New-Api-User` header required by new-api admin APIs.
-
-If Turnstile or 2FA blocks dashboard login, use `NEWAPI_COOKIE` instead. Cookie
-or direct authorization mode also needs `NEWAPI_USER_HEADER`, usually the admin
-user id, for example `1`.
-
-For `LLM_BASE_URL`, you can point it to your own `new-api` endpoint:
+编辑 `.env` 文件，填写必要参数：
 
 ```env
-LLM_BASE_URL=https://your-new-api.example.com/v1
+# new-api 地址
+NEWAPI_BASE_URL=http://localhost:3000
+
+# 认证方式（二选一）
+# 方式一：用户名密码登录（Docker 部署推荐）
+NEWAPI_USERNAME=admin
+NEWAPI_PASSWORD=your-password
+
+# 方式二：直接使用 Cookie（有 Turnstile/2FA 时使用）
+# NEWAPI_COOKIE=your-cookie-string
+# NEWAPI_USER_HEADER=1
+
+# LLM 配置（可指向你自己的 new-api 端点）
+LLM_BASE_URL=http://localhost:3000/v1
 LLM_API_KEY=sk-...
+LLM_MODEL=gpt-4.1-mini
+
+# Discord Webhook（可选）
+DISCORD_WEBHOOK_URL=https://discord.com/api/webhooks/...
 ```
 
-## Run Once
+> **💡 提示：** `LLM_BASE_URL` 可以直接指向你自己的 `new-api` 实例的 `/v1` 端点，实现自举。
+
+### 运行
 
 ```bash
+# 执行一次巡检
 bun run once
-```
 
-Dry-run skips Discord sending and prints the report:
-
-```bash
+# 试运行（不发送 Discord，仅打印报告）
 bun run dry-run
-```
 
-## Run As A Loop
-
-```bash
+# 启动定时调度（按 REPORT_INTERVAL_MINUTES 间隔循环执行）
 bun run start
 ```
 
-The interval is controlled by `REPORT_INTERVAL_MINUTES`.
+## 🖥️ 管理面板
 
-## Management Panel
+内置的 Web 管理面板运行在 `8787` 端口。
 
-The sidecar includes a lightweight web panel on port `8787`.
-
-Set a password before exposing it:
+### 配置面板
 
 ```env
 PANEL_ENABLED=true
@@ -80,61 +114,48 @@ PANEL_USERNAME=admin
 PANEL_PASSWORD=change-this-password
 ```
 
-Run the panel without the scheduler for local checks:
+### 运行面板
 
 ```bash
+# 仅启动面板（不含调度器）
 bun run panel
-```
 
-Run the panel API and Vue frontend together during development:
-
-```bash
+# 开发模式（面板 API + Vue 前端热重载）
 bun run dev
-```
 
-The Vue dev server runs on `5173` by default and proxies `/api/*` to the Bun
-panel server on `8787`. You can override them with `WEB_PORT` and `PANEL_PORT`.
-
-Build the Vue frontend before packaging or production static serving:
-
-```bash
+# 构建前端用于生产部署
 bun run build
 ```
 
-In normal Docker mode, `bun run start` starts both the scheduler and the panel.
+> 开发模式下，Vue 开发服务器默认运行在 `5173` 端口，自动代理 `/api/*` 到 Bun 面板服务的 `8787` 端口。
 
-Panel capabilities in the first version:
+### 面板功能
 
-- view sidecar status;
-- run a manual check without sending Discord by default;
-- view the latest report;
-- view a sanitized channel snapshot.
+| 功能 | 说明 |
+|------|------|
+| 🔍 状态查看 | 查看 Sidecar 运行状态 |
+| 🔄 手动巡检 | 触发一次手动检查（默认不发送 Discord） |
+| 📄 报告查看 | 查看最新生成的运维报告 |
+| 📡 渠道快照 | 查看脱敏后的渠道信息 |
 
-## Docker Image
+## 🐳 Docker 部署
 
-GitHub Actions publishes the image to GHCR when `main` is pushed:
+### 镜像
 
-```text
+GitHub Actions 在 `main` 分支推送时自动构建并发布镜像：
+
+```
 ghcr.io/everforever7/new-api-ai-ops:latest
 ```
 
-Manual releases can also be started from the repository's Actions tab through
-`Publish Docker image`.
+也可在仓库的 Actions 标签页手动触发 `Publish Docker image` 工作流发布。
 
-## Docker Compose
+### Docker Compose
 
-The sidecar can run in the same compose stack as `new-api`.
-
-Use internal service URLs:
-
-```env
-NEWAPI_BASE_URL=http://new-api:3000
-LLM_BASE_URL=http://new-api:3000/v1
-```
-
-Example service:
+推荐与 `new-api` 同栈部署，使用 Docker 内部网络通信：
 
 ```yaml
+services:
   new-api-ai-ops:
     image: ghcr.io/everforever7/new-api-ai-ops:latest
     container_name: new-api-ai-ops
@@ -148,6 +169,7 @@ Example service:
       NEWAPI_USER_HEADER: "${NEWAPI_USER_HEADER:-}"
       LLM_BASE_URL: "http://new-api:3000/v1"
       LLM_API_KEY: "${AI_OPS_LLM_API_KEY}"
+      LLM_MODEL: "gpt-4.1-mini"
       DISCORD_WEBHOOK_URL: "${AI_OPS_DISCORD_WEBHOOK_URL}"
       REPORT_INTERVAL_MINUTES: "15"
       AUTO_EXECUTE: "false"
@@ -158,29 +180,77 @@ Example service:
     ports:
       - "8787:8787"
     volumes:
-      - /mnt/Save/apps/new-api/ai_ops_reports:/app/reports
+      - ./ai_ops_reports:/app/reports
     networks: [newapi-net]
 ```
 
-If you use Cloudflare Tunnel, you can remove `ports:` and route a public
-hostname to:
+> **💡 提示：** 如果使用 Cloudflare Tunnel，可以移除 `ports:` 配置，将公共域名路由到 `http://new-api-ai-ops:8787`（这是 Docker 内部地址，需要通过 Tunnel、Nginx 等反向代理对外暴露）。
 
-```text
-http://new-api-ai-ops:8787
-```
+## ⚙️ 环境变量参考
 
-`http://new-api-ai-ops:8787` is an internal Docker service address. It works
-from other containers on the same compose network, such as Cloudflare Tunnel,
-but it is not a public browser URL by itself. Public access still needs a real
-domain routed by Cloudflare Tunnel, Nginx, or another reverse proxy.
+### new-api 连接
 
-## Safety Model
+| 变量 | 说明 | 默认值 |
+|------|------|--------|
+| `NEWAPI_BASE_URL` | new-api 地址 | `http://localhost:3000` |
+| `NEWAPI_USERNAME` | 管理员用户名 | — |
+| `NEWAPI_PASSWORD` | 管理员密码 | — |
+| `NEWAPI_COOKIE` | 直接使用 Cookie 认证 | — |
+| `NEWAPI_AUTHORIZATION` | 直接使用 Authorization 头 | — |
+| `NEWAPI_USER_HEADER` | 管理员用户 ID（Cookie 模式必填） | — |
+| `NEWAPI_REQUEST_TIMEOUT_MS` | 请求超时时间 | `20000` |
 
-The first version is read-only. It may produce proposed actions, but it will not execute them.
+### 数据采集
 
-Future execution should be limited by policy:
+| 变量 | 说明 | 默认值 |
+|------|------|--------|
+| `NEWAPI_CHANNEL_PAGE_SIZE` | 渠道分页大小 | `100` |
+| `NEWAPI_LOG_PAGE_SIZE` | 日志分页大小 | `100` |
+| `NEWAPI_LOG_HOURS` | 日志采集窗口（小时） | `1` |
+| `BALANCE_WARNING_USD` | 余额预警阈值（美元） | `5` |
 
-- allow low-risk actions only;
-- require manual confirmation for creating, deleting, repricing, or regrouping channels;
-- write an audit record for every action;
-- keep Discord reports separate from execution approval.
+### LLM 配置
+
+| 变量 | 说明 | 默认值 |
+|------|------|--------|
+| `LLM_BASE_URL` | OpenAI 兼容端点 | `http://localhost:3000/v1` |
+| `LLM_API_KEY` | API 密钥 | — |
+| `LLM_MODEL` | 模型名称 | `gpt-4.1-mini` |
+| `LLM_TEMPERATURE` | 温度参数 | `0.2` |
+
+### 报告 & 调度
+
+| 变量 | 说明 | 默认值 |
+|------|------|--------|
+| `DISCORD_WEBHOOK_URL` | Discord Webhook 地址 | — |
+| `REPORT_INTERVAL_MINUTES` | 巡检间隔（分钟） | `15` |
+| `REPORT_MIN_REQUESTS` | 最小请求数阈值 | `20` |
+| `REPORT_FAILURE_RATE_THRESHOLD` | 失败率告警阈值 | `0.3` |
+| `REPORT_TIMEZONE` | 报告时区 | `Asia/Hong_Kong` |
+| `REPORT_SAVE_DIR` | 报告保存目录 | `reports` |
+| `AUTO_EXECUTE` | 是否自动执行操作 | `false` |
+
+### 管理面板
+
+| 变量 | 说明 | 默认值 |
+|------|------|--------|
+| `PANEL_ENABLED` | 是否启用面板 | `true` |
+| `PANEL_HOST` | 监听地址 | `0.0.0.0` |
+| `PANEL_PORT` | 监听端口 | `8787` |
+| `PANEL_USERNAME` | 面板用户名 | `admin` |
+| `PANEL_PASSWORD` | 面板密码 | — |
+
+## 🔒 安全模型
+
+当前版本为 **只读模式**，不会自动执行任何变更操作。
+
+未来版本的执行策略将遵循以下原则：
+
+- ✅ 仅允许低风险操作自动执行
+- ⚠️ 创建、删除、调价、重新分组渠道等操作需要人工确认
+- 📝 所有操作记录审计日志
+- 🔀 Discord 报告与执行审批分离
+
+## 📄 License
+
+[MIT](LICENSE)
