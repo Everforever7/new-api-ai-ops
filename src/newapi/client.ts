@@ -10,6 +10,7 @@ type RequestOptions = {
   method?: string
   query?: Record<string, string | number | boolean | undefined>
   body?: unknown
+  allowMissingData?: boolean
 }
 
 type LoginData = {
@@ -85,6 +86,40 @@ export class NewApiClient {
     })
   }
 
+  async getChannel(id: number) {
+    return this.request<Record<string, unknown>>(`/api/channel/${id}`)
+  }
+
+  async testChannel(id: number, model?: string) {
+    return this.request<Record<string, unknown>>(`/api/channel/test/${id}`, {
+      query: { model },
+      allowMissingData: true,
+    })
+  }
+
+  async createChannel(data: unknown) {
+    return this.request<Record<string, unknown>>('/api/channel', {
+      method: 'POST',
+      body: data,
+      allowMissingData: true,
+    })
+  }
+
+  async updateChannel(id: number, data: Record<string, unknown>) {
+    return this.request<Record<string, unknown>>('/api/channel/', {
+      method: 'PUT',
+      body: { id, ...data },
+      allowMissingData: true,
+    })
+  }
+
+  async deleteChannel(id: number) {
+    return this.request<Record<string, unknown>>(`/api/channel/${id}`, {
+      method: 'DELETE',
+      allowMissingData: true,
+    })
+  }
+
   private async request<T>(path: string, options: RequestOptions = {}) {
     await this.ensureSession()
     return this.requestWithSession<T>(path, options, true)
@@ -126,10 +161,12 @@ export class NewApiClient {
       if (json.success === false) {
         throw new Error(`new-api business error: ${json.message || 'unknown'}`)
       }
-      if (json.data === undefined) {
+      if (json.data === undefined && !options.allowMissingData) {
         throw new Error(`new-api response missing data for ${path}`)
       }
-      return json.data
+      return (json.data ?? {
+        message: json.message || 'ok',
+      }) as T
     } finally {
       clearTimeout(timeout)
     }

@@ -5,6 +5,12 @@ import { collectHealthSnapshot } from './newapi/health'
 import { sendDiscordReport } from './reporters/discord'
 import { saveReport } from './reporters/save'
 import { logger } from './logger'
+import {
+  buildActionQueue,
+  confirmAndExecuteAction,
+  rejectAction,
+  type OpsAction,
+} from './actions'
 
 export type RunReportOptions = {
   dryRun?: boolean
@@ -17,6 +23,7 @@ export type RunReportResult = {
   report: string
   reportPath: string
   sentDiscord: boolean
+  actions: OpsAction[]
   completedAt: string
 }
 
@@ -37,6 +44,43 @@ export class OpsRuntime {
       lastError: this.lastError,
       lastSnapshot: this.lastResult?.snapshot,
       lastReport: this.lastResult?.report,
+      lastActions: this.lastResult?.actions || [],
+    }
+  }
+
+  getActions() {
+    return this.lastResult?.actions || []
+  }
+
+  async executeAction(actionId: string) {
+    const action = this.lastResult?.actions.find((item) => item.id === actionId)
+    if (!action) {
+      throw new Error(`action not found: ${actionId}`)
+    }
+
+    const next = await confirmAndExecuteAction(this.config, action)
+    this.replaceAction(next)
+    return next
+  }
+
+  async rejectAction(actionId: string) {
+    const action = this.lastResult?.actions.find((item) => item.id === actionId)
+    if (!action) {
+      throw new Error(`action not found: ${actionId}`)
+    }
+
+    const next = await rejectAction(action)
+    this.replaceAction(next)
+    return next
+  }
+
+  private replaceAction(action: OpsAction) {
+    if (!this.lastResult) return
+    this.lastResult = {
+      ...this.lastResult,
+      actions: this.lastResult.actions.map((item) =>
+        item.id === action.id ? action : item
+      ),
     }
   }
 
@@ -60,6 +104,9 @@ export class OpsRuntime {
       const reportPath = await saveReport(this.config.report.saveDir, report)
       logger.info(`saved report: ${reportPath}`)
 
+      logger.info('planning AI actions')
+      const actions = await buildActionQueue(this.config, snapshot, report)
+
       let sentDiscord = false
       if (sendDiscord) {
         await sendDiscordReport(report, {
@@ -76,6 +123,7 @@ export class OpsRuntime {
         report,
         reportPath,
         sentDiscord,
+        actions,
         completedAt: new Date().toISOString(),
       }
       this.lastResult = result

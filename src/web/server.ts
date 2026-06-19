@@ -195,6 +195,21 @@ async function handleApi(
       return json(await saveOpsSettings(body))
     }
 
+    if (url.pathname === '/api/actions' && req.method === 'GET') {
+      return json(runtime.getActions())
+    }
+
+    const actionMatch = url.pathname.match(/^\/api\/actions\/([^/]+)\/(execute|reject)$/)
+    if (actionMatch && req.method === 'POST') {
+      const [, actionId, actionVerb] = actionMatch
+      const decodedActionId = decodeURIComponent(actionId)
+      return json(
+        actionVerb === 'execute'
+          ? await runtime.executeAction(decodedActionId)
+          : await runtime.rejectAction(decodedActionId)
+      )
+    }
+
     return jsonError('not found', 404)
   } catch (error) {
     return jsonError(error instanceof Error ? error.message : String(error))

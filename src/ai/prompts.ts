@@ -5,7 +5,7 @@ export function buildOpsPrompt(snapshot: HealthSnapshot) {
     {
       role: 'system' as const,
       content:
-        '你是 new-api 的 AI SRE 助手。你要根据机器快照生成简洁、可执行、谨慎的中文运维报告。不要编造数据；没有数据就说明暂未观察到。任何修改渠道、删除、调价、改分组都只能作为建议，不能声称已经执行。',
+        '你是 new-api 的 AI SRE 助手。你要根据机器快照生成简洁、可执行、谨慎的中文运维报告。不要编造数据；没有数据就说明暂未观察到。任何修改渠道、删除、调价、改分组都只能作为建议，不能声称已经执行。支持的 action 只有：test_channel、notify_low_balance、create_channel、update_channel、disable_channel、delete_channel。高风险动作必须 requires_confirm=true。create_channel 和 update_channel 如需执行，必须把参数放进 payload 对象。',
     },
     {
       role: 'user' as const,
@@ -17,7 +17,9 @@ export function buildOpsPrompt(snapshot: HealthSnapshot) {
 3. 列出异常或风险，最多 6 条。
 4. 给出建议动作，区分“可自动化低风险”和“需要人工确认”。
 5. 如果请求量低于 policy.minRequests，要降低结论置信度。
-6. 最后输出一个 \`proposed_actions\` JSON 代码块，数组元素包含 action、target、risk、requires_confirm、reason。
+6. 最后输出一个 \`proposed_actions\` JSON 代码块，数组元素包含 action、target、risk、requires_confirm、reason，可选 payload。
+7. target 对渠道动作用 \`channel:123\` 这种格式。
+8. 仅在你真的有足够信息时才输出 create_channel 或 update_channel 的 payload。
 
 快照：
 ${JSON.stringify(snapshot, null, 2)}`,
@@ -66,12 +68,21 @@ export function buildRuleBasedReport(snapshot: HealthSnapshot) {
 
   const proposedActions = [
     ...snapshot.logs.topErrorChannels.slice(0, 3).map((channel) => ({
-      action: 'inspect_channel_errors',
+      action: 'test_channel',
       target: `channel:${channel.channelId}`,
       risk: 'low',
       requires_confirm: false,
       reason: `recent errors: ${channel.count}`,
     })),
+    ...(snapshot.logs.failureRate >= snapshot.policy.failureRateThreshold
+      ? snapshot.logs.topErrorChannels.slice(0, 2).map((channel) => ({
+          action: 'disable_channel',
+          target: `channel:${channel.channelId}`,
+          risk: 'medium',
+          requires_confirm: true,
+          reason: `failure rate exceeded threshold and channel has repeated errors: ${channel.count}`,
+        }))
+      : []),
     ...snapshot.channels.lowBalance.slice(0, 3).map((channel) => ({
       action: 'notify_low_balance',
       target: `channel:${channel.id}`,
@@ -83,8 +94,8 @@ export function buildRuleBasedReport(snapshot: HealthSnapshot) {
 
   lines.push('')
   lines.push('### 建议')
-  lines.push('- 当前版本只汇报，不自动修改渠道。')
-  lines.push('- 禁用、删除、改权重、改分组应继续要求人工确认。')
+  lines.push('- AI 动作会先进入策略引擎，由设置页的权限、确认策略和保护规则决定是否执行。')
+  lines.push('- 禁用、删除、改权重、改分组等变更动作应继续要求人工确认。')
   lines.push('')
   lines.push('```json')
   lines.push(JSON.stringify(proposedActions, null, 2))

@@ -40,3 +40,21 @@ export function saveSettings(settings) {
     body: JSON.stringify(settings),
   })
 }
+
+export function getActions() {
+  return api('/api/actions')
+}
+
+export function executeAction(actionId) {
+  return api(`/api/actions/${encodeURIComponent(actionId)}/execute`, {
+    method: 'POST',
+    body: '{}',
+  })
+}
+
+export function rejectAction(actionId) {
+  return api(`/api/actions/${encodeURIComponent(actionId)}/reject`, {
+    method: 'POST',
+    body: '{}',
+  })
+}

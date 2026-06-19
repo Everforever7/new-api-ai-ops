@@ -6,10 +6,14 @@ import {
   FileText,
   Radio,
   Settings2,
+  Bot,
 } from 'lucide-vue-next'
 import {
+  executeAction as requestExecuteAction,
   getChannels,
+  getActions,
   getSettings,
+  rejectAction as requestRejectAction,
   getStatus,
   runCheck as requestRunCheck,
   saveSettings as requestSaveSettings,
@@ -23,6 +27,7 @@ import ReportPanel from './components/ReportPanel.vue'
 import ChannelsTable from './components/ChannelsTable.vue'
 import SettingsPanel from './components/SettingsPanel.vue'
 import ErrorToast from './components/ErrorToast.vue'
+import ActionsPanel from './components/ActionsPanel.vue'
 
 const STORAGE_KEYS = {
   locale: 'new-api-ai-ops:locale',
@@ -37,17 +42,21 @@ const activeTab = ref('dashboard')
 const status = ref(null)
 const channels = ref([])
 const settings = ref(null)
+const actions = ref([])
 const errorToasts = ref([])
 const refreshing = ref(false)
 const runningCheck = ref(false)
 const settingsLoading = ref(false)
 const settingsSaving = ref(false)
 const settingsSavedAt = ref('')
+const actionsLoading = ref(false)
+const executingActionIds = ref([])
 
 const tabs = computed(() => [
   { id: 'dashboard', label: t('tabs.dashboard'), icon: LayoutDashboard },
   { id: 'report', label: t('tabs.report'), icon: FileText },
   { id: 'channels', label: t('tabs.channels'), icon: Radio },
+  { id: 'actions', label: t('tabs.actions'), icon: Bot },
   { id: 'settings', label: t('tabs.settings'), icon: Settings2 },
 ])
 
@@ -111,6 +120,12 @@ watch(
   },
   { immediate: true }
 )
+
+watch(activeTab, (nextTab) => {
+  if (nextTab === 'actions') {
+    loadActions()
+  }
+})
 
 function t(key, params) {
   return translate(locale.value, key, params)
@@ -241,6 +256,9 @@ async function refreshAll() {
 
     if (statusResult.status === 'fulfilled') {
       status.value = statusResult.value
+      if (Array.isArray(statusResult.value.lastActions)) {
+        actions.value = statusResult.value.lastActions
+      }
     } else {
       notifyError('errors.statusLoadFailed', statusResult.reason)
     }
@@ -261,6 +279,7 @@ async function runManualCheck() {
   try {
     await requestRunCheck()
     await refreshAll()
+    await loadActions()
   } catch (error) {
     notifyError('errors.runFailed', error)
   } finally {
@@ -276,6 +295,45 @@ async function loadSettings() {
     notifyError('errors.settingsLoadFailed', error)
   } finally {
     settingsLoading.value = false
+  }
+}
+
+async function loadActions() {
+  actionsLoading.value = true
+  try {
+    actions.value = await getActions()
+  } catch (error) {
+    notifyError('errors.actionsLoadFailed', error)
+  } finally {
+    actionsLoading.value = false
+  }
+}
+
+async function executeAction(actionId) {
+  executingActionIds.value = [...new Set([...executingActionIds.value, actionId])]
+  try {
+    const updated = await requestExecuteAction(actionId)
+    actions.value = actions.value.map((action) =>
+      action.id === updated.id ? updated : action
+    )
+  } catch (error) {
+    notifyError('errors.actionExecuteFailed', error)
+  } finally {
+    executingActionIds.value = executingActionIds.value.filter((id) => id !== actionId)
+  }
+}
+
+async function rejectAction(actionId) {
+  executingActionIds.value = [...new Set([...executingActionIds.value, actionId])]
+  try {
+    const updated = await requestRejectAction(actionId)
+    actions.value = actions.value.map((action) =>
+      action.id === updated.id ? updated : action
+    )
+  } catch (error) {
+    notifyError('errors.actionRejectFailed', error)
+  } finally {
+    executingActionIds.value = executingActionIds.value.filter((id) => id !== actionId)
   }
 }
 
@@ -296,6 +354,7 @@ async function saveSettings() {
 onMounted(() => {
   refreshAll()
   loadSettings()
+  loadActions()
 })
 </script>
 
@@ -341,6 +400,18 @@ onMounted(() => {
           :t="t"
           :formatBalance="formatBalance"
           :formatLatency="formatLatency"
+        />
+
+        <ActionsPanel
+          v-else-if="activeTab === 'actions'"
+          key="actions"
+          :actions="actions"
+          :loading="actionsLoading"
+          :executingActionIds="executingActionIds"
+          :t="t"
+          @executeAction="executeAction"
+          @rejectAction="rejectAction"
+          @refreshActions="loadActions"
         />
 
         <SettingsPanel
