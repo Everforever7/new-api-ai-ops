@@ -2,6 +2,7 @@
 import { computed } from 'vue'
 import {
   Activity,
+  Brain,
   Edit3,
   Lock,
   PlusCircle,
@@ -155,6 +156,31 @@ function updateList(path, text, type = 'string') {
           >
             {{
               settings.aiExecution.enabled
+                ? t('settings.on')
+                : t('settings.off')
+            }}
+          </button>
+        </div>
+      </article>
+
+      <article class="bento-item high-density">
+        <div class="bento-flex-row">
+          <div class="bento-icon-wrapper">
+            <Brain :size="28" />
+          </div>
+          <div class="settings-inline-main">
+            <div class="bento-label">{{ t('settings.prompt.includeBalance') }}</div>
+            <div class="bento-sub">{{ t('settings.prompt.includeBalanceHint') }}</div>
+          </div>
+          <button
+            class="setting-switch"
+            :class="{ active: settings.prompt.includeBalance }"
+            type="button"
+            :aria-pressed="settings.prompt.includeBalance"
+            @click="update('prompt.includeBalance', !settings.prompt.includeBalance)"
+          >
+            {{
+              settings.prompt.includeBalance
                 ? t('settings.on')
                 : t('settings.off')
             }}

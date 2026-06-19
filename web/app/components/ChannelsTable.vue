@@ -22,10 +22,17 @@ function channelStatusClass(channel) {
 
 <template>
   <div class="bento-grid">
-    <article class="bento-item bento-full table-bento">
-       <div class="bento-header">
-         <h3>{{ t('channels.title') }}</h3>
-       </div>
+    <article class="bento-item bento-hero">
+      <div class="hero-content">
+        <h2>{{ t('channels.title') }}</h2>
+        <div class="status-pill warn">
+          <div class="status-dot"></div>
+          {{ visibleChannels.length }} {{ t('channels.title') }}
+        </div>
+      </div>
+    </article>
+
+    <article class="bento-item bento-full adaptive-bento">
        <div class="bento-body bento-table-wrap">
          <table>
            <thead>
