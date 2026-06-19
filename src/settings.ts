@@ -5,6 +5,9 @@ export type ConfirmationStrategy = 'auto' | 'confirm' | 'never'
 
 export type OpsSettings = {
   version: 1
+  prompt: {
+    includeBalance: boolean
+  }
   aiExecution: {
     enabled: boolean
     permissions: {
@@ -41,6 +44,9 @@ const SETTINGS_PATH = process.env.AI_OPS_SETTINGS_PATH?.trim() || 'data/settings
 
 const DEFAULT_SETTINGS: OpsSettings = {
   version: 1,
+  prompt: {
+    includeBalance: false,
+  },
   aiExecution: {
     enabled: true,
     permissions: {
@@ -165,6 +171,7 @@ export function normalizeOpsSettings(input: unknown): OpsSettings {
   const defaults = cloneDefaultSettings()
   const root = isRecord(input) ? input : {}
   const aiExecution = readRecord(root, 'aiExecution')
+  const prompt = readRecord(root, 'prompt')
   const permissions = readRecord(aiExecution, 'permissions')
   const confirmation = readRecord(aiExecution, 'confirmation')
   const safety = readRecord(aiExecution, 'safety')
@@ -172,6 +179,13 @@ export function normalizeOpsSettings(input: unknown): OpsSettings {
 
   return {
     version: 1,
+    prompt: {
+      includeBalance: readBoolean(
+        prompt,
+        'includeBalance',
+        defaults.prompt.includeBalance
+      ),
+    },
     aiExecution: {
       enabled: readBoolean(
         aiExecution,

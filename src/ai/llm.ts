@@ -1,5 +1,6 @@
 import type { AppConfig } from '../config'
 import type { HealthSnapshot } from '../types/domain'
+import { loadOpsSettings } from '../settings'
 import { buildOpsPrompt, buildRuleBasedReport } from './prompts'
 
 type ChatMessage = {
@@ -19,8 +20,13 @@ export async function generateOpsReport(
   config: AppConfig,
   snapshot: HealthSnapshot
 ) {
+  const settings = await loadOpsSettings()
+  const promptOptions = {
+    includeBalance: settings.prompt.includeBalance,
+  }
+
   if (!config.llm.apiKey) {
-    return buildRuleBasedReport(snapshot)
+    return buildRuleBasedReport(snapshot, promptOptions)
   }
 
   const response = await fetch(`${config.llm.baseUrl}/chat/completions`, {
@@ -31,7 +37,7 @@ export async function generateOpsReport(
     },
     body: JSON.stringify({
       model: config.llm.model,
-      messages: buildOpsPrompt(snapshot) satisfies ChatMessage[],
+      messages: buildOpsPrompt(snapshot, promptOptions) satisfies ChatMessage[],
       temperature: config.llm.temperature,
     }),
   })

@@ -1,11 +1,44 @@
 import type { HealthSnapshot } from '../types/domain'
 
-export function buildOpsPrompt(snapshot: HealthSnapshot) {
+type PromptOptions = {
+  includeBalance?: boolean
+}
+
+function snapshotForPrompt(
+  snapshot: HealthSnapshot,
+  options: PromptOptions
+): HealthSnapshot {
+  if (options.includeBalance) return snapshot
+  return {
+    ...snapshot,
+    channels: {
+      ...snapshot.channels,
+      lowBalance: [],
+    },
+  }
+}
+
+function supportedActions(options: PromptOptions) {
+  return [
+    'test_channel',
+    ...(options.includeBalance ? ['notify_low_balance'] : []),
+    'create_channel',
+    'update_channel',
+    'disable_channel',
+    'delete_channel',
+  ].join('、')
+}
+
+export function buildOpsPrompt(
+  snapshot: HealthSnapshot,
+  options: PromptOptions = {}
+) {
+  const promptSnapshot = snapshotForPrompt(snapshot, options)
   return [
     {
       role: 'system' as const,
       content:
-        '你是 new-api 的 AI SRE 助手。你要根据机器快照生成简洁、可执行、谨慎的中文运维报告。不要编造数据；没有数据就说明暂未观察到。任何修改渠道、删除、调价、改分组都只能作为建议，不能声称已经执行。支持的 action 只有：test_channel、notify_low_balance、create_channel、update_channel、disable_channel、delete_channel。高风险动作必须 requires_confirm=true。create_channel 和 update_channel 如需执行，必须把参数放进 payload 对象。',
+        `你是 new-api 的 AI SRE 助手。你要根据机器快照生成简洁、可执行、谨慎的中文运维报告。不要编造数据；没有数据就说明暂未观察到。任何修改渠道、删除、调价、改分组都只能作为建议，不能声称已经执行。支持的 action 只有：${supportedActions(options)}。高风险动作必须 requires_confirm=true。create_channel 和 update_channel 如需执行，必须把参数放进 payload 对象。`,
     },
     {
       role: 'user' as const,
@@ -22,12 +55,15 @@ export function buildOpsPrompt(snapshot: HealthSnapshot) {
 8. 仅在你真的有足够信息时才输出 create_channel 或 update_channel 的 payload。
 
 快照：
-${JSON.stringify(snapshot, null, 2)}`,
+${JSON.stringify(promptSnapshot, null, 2)}`,
     },
   ]
 }
 
-export function buildRuleBasedReport(snapshot: HealthSnapshot) {
+export function buildRuleBasedReport(
+  snapshot: HealthSnapshot,
+  options: PromptOptions = {}
+) {
   const lines: string[] = []
   const start = snapshot.window.start
   const end = snapshot.window.end
@@ -60,10 +96,12 @@ export function buildRuleBasedReport(snapshot: HealthSnapshot) {
       `- 错误渠道 #${channel.channelId} ${channel.channelName}：${channel.count} 次，样例：${channel.sample}`
     )
   }
-  for (const channel of snapshot.channels.lowBalance.slice(0, 5)) {
-    lines.push(
-      `- 低余额 #${channel.id} ${channel.name}：$${channel.balance.toFixed(2)}`
-    )
+  if (options.includeBalance) {
+    for (const channel of snapshot.channels.lowBalance.slice(0, 5)) {
+      lines.push(
+        `- 低余额 #${channel.id} ${channel.name}：$${channel.balance.toFixed(2)}`
+      )
+    }
   }
 
   const proposedActions = [
@@ -83,13 +121,15 @@ export function buildRuleBasedReport(snapshot: HealthSnapshot) {
           reason: `failure rate exceeded threshold and channel has repeated errors: ${channel.count}`,
         }))
       : []),
-    ...snapshot.channels.lowBalance.slice(0, 3).map((channel) => ({
-      action: 'notify_low_balance',
-      target: `channel:${channel.id}`,
-      risk: 'low',
-      requires_confirm: false,
-      reason: `balance ${channel.balance}`,
-    })),
+    ...(options.includeBalance
+      ? snapshot.channels.lowBalance.slice(0, 3).map((channel) => ({
+          action: 'notify_low_balance',
+          target: `channel:${channel.id}`,
+          risk: 'low',
+          requires_confirm: false,
+          reason: `balance ${channel.balance}`,
+        }))
+      : []),
   ]
 
   lines.push('')

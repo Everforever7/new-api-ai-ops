@@ -146,6 +146,11 @@ const dictionaries = {
         disableChannel: '禁用渠道',
         deleteChannel: '删除渠道',
       },
+      prompt: {
+        title: '提示词内容',
+        includeBalance: '把余额纳入 AI 提示词',
+        includeBalanceHint: '余额当前可能不准确；关闭后仍会在面板展示，但 AI 不会基于余额分析或建议。',
+      },
       safety: {
         title: '执行阈值',
         minRequests: '最低请求数',
@@ -302,6 +307,11 @@ const dictionaries = {
         updateChannel: 'Update channel',
         disableChannel: 'Disable channel',
         deleteChannel: 'Delete channel',
+      },
+      prompt: {
+        title: 'Prompt content',
+        includeBalance: 'Include balance in AI prompt',
+        includeBalanceHint: 'Balance may be inaccurate right now; when off, it stays visible in the panel but AI will not analyze or suggest from it.',
       },
       safety: {
         title: 'Execution limits',
