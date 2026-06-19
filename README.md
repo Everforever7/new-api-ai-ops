@@ -86,6 +86,21 @@ Run the panel without the scheduler for local checks:
 bun run panel
 ```
 
+Run the panel API and Vue frontend together during development:
+
+```bash
+bun run dev
+```
+
+The Vue dev server runs on `5173` by default and proxies `/api/*` to the Bun
+panel server on `8787`. You can override them with `WEB_PORT` and `PANEL_PORT`.
+
+Build the Vue frontend before packaging or production static serving:
+
+```bash
+bun run build
+```
+
 In normal Docker mode, `bun run start` starts both the scheduler and the panel.
 
 Panel capabilities in the first version:

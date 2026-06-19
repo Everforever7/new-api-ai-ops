@@ -1,11 +1,30 @@
+import { extname, isAbsolute, join, relative } from 'node:path'
+import { fileURLToPath } from 'node:url'
 import type { AppConfig } from '../config'
 import type { Channel } from '../types/domain'
 import { NewApiClient } from '../newapi/client'
 import { OpsRuntime } from '../runtime'
 import { logger } from '../logger'
-import { renderPanelHtml } from './page'
 
 type JsonValue = Record<string, unknown> | unknown[]
+
+const staticRoot = fileURLToPath(new URL('../../web/dist/', import.meta.url))
+
+const contentTypes: Record<string, string> = {
+  '.css': 'text/css; charset=utf-8',
+  '.html': 'text/html; charset=utf-8',
+  '.ico': 'image/x-icon',
+  '.jpeg': 'image/jpeg',
+  '.jpg': 'image/jpeg',
+  '.js': 'text/javascript; charset=utf-8',
+  '.json': 'application/json; charset=utf-8',
+  '.map': 'application/json; charset=utf-8',
+  '.png': 'image/png',
+  '.svg': 'image/svg+xml',
+  '.webp': 'image/webp',
+  '.woff': 'font/woff',
+  '.woff2': 'font/woff2',
+}
 
 function json(data: JsonValue, status = 200) {
   return Response.json({ success: status < 400, data }, { status })
@@ -45,6 +64,62 @@ function unauthorized() {
       'WWW-Authenticate': 'Basic realm="new-api-ai-ops"',
     },
   })
+}
+
+function contentType(filePath: string) {
+  return contentTypes[extname(filePath).toLowerCase()] || 'application/octet-stream'
+}
+
+function resolveStaticPath(pathname: string) {
+  let decoded: string
+
+  try {
+    decoded = decodeURIComponent(pathname)
+  } catch {
+    return undefined
+  }
+
+  const relativePath = decoded === '/' ? 'index.html' : decoded.replace(/^\/+/, '')
+  const filePath = join(staticRoot, relativePath)
+  const resolvedRelative = relative(staticRoot, filePath)
+
+  if (resolvedRelative.startsWith('..') || isAbsolute(resolvedRelative)) {
+    return undefined
+  }
+
+  return filePath
+}
+
+async function servePanelAsset(url: URL) {
+  const filePath = resolveStaticPath(url.pathname)
+  if (!filePath) return new Response('Not found', { status: 404 })
+
+  const file = Bun.file(filePath)
+  if (await file.exists()) {
+    return new Response(file, {
+      headers: {
+        'Content-Type': contentType(filePath),
+      },
+    })
+  }
+
+  if (!extname(url.pathname)) {
+    const indexPath = join(staticRoot, 'index.html')
+    const index = Bun.file(indexPath)
+
+    if (await index.exists()) {
+      return new Response(index, {
+        headers: {
+          'Content-Type': contentType(indexPath),
+        },
+      })
+    }
+  }
+
+  return new Response(
+    'Panel frontend is not built. Run `bun run web:build` first.',
+    { status: 404 }
+  )
 }
 
 function statusLabel(status: number) {
@@ -135,14 +210,12 @@ export function startPanelServer(config: AppConfig, runtime: OpsRuntime) {
         return unauthorized()
       }
 
-      if (url.pathname === '/' && req.method === 'GET') {
-        return new Response(renderPanelHtml(), {
-          headers: { 'Content-Type': 'text/html; charset=utf-8' },
-        })
-      }
-
       if (url.pathname.startsWith('/api/')) {
         return handleApi(req, url, config, runtime)
+      }
+
+      if (req.method === 'GET' || req.method === 'HEAD') {
+        return servePanelAsset(url)
       }
 
       return new Response('Not found', { status: 404 })
