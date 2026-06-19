@@ -8,12 +8,14 @@ export type OpsSettings = {
   aiExecution: {
     enabled: boolean
     permissions: {
+      testChannel: boolean
       createChannel: boolean
       updateChannel: boolean
       disableChannel: boolean
       deleteChannel: boolean
     }
     confirmation: {
+      testChannel: ConfirmationStrategy
       createChannel: ConfirmationStrategy
       updateChannel: ConfirmationStrategy
       disableChannel: ConfirmationStrategy
@@ -42,12 +44,14 @@ const DEFAULT_SETTINGS: OpsSettings = {
   aiExecution: {
     enabled: true,
     permissions: {
+      testChannel: true,
       createChannel: true,
       updateChannel: false,
       disableChannel: false,
       deleteChannel: false,
     },
     confirmation: {
+      testChannel: 'confirm',
       createChannel: 'confirm',
       updateChannel: 'confirm',
       disableChannel: 'confirm',
@@ -175,6 +179,11 @@ export function normalizeOpsSettings(input: unknown): OpsSettings {
         defaults.aiExecution.enabled
       ),
       permissions: {
+        testChannel: readBoolean(
+          permissions,
+          'testChannel',
+          defaults.aiExecution.permissions.testChannel
+        ),
         createChannel: readBoolean(
           permissions,
           'createChannel',
@@ -197,6 +206,11 @@ export function normalizeOpsSettings(input: unknown): OpsSettings {
         ),
       },
       confirmation: {
+        testChannel: readStrategy(
+          confirmation,
+          'testChannel',
+          defaults.aiExecution.confirmation.testChannel
+        ),
         createChannel: readStrategy(
           confirmation,
           'createChannel',

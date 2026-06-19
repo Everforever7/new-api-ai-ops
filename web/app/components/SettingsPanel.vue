@@ -1,6 +1,7 @@
 <script setup>
 import { computed } from 'vue'
 import {
+  Activity,
   Edit3,
   Lock,
   PlusCircle,
@@ -24,6 +25,11 @@ const props = defineProps({
 const emit = defineEmits(['updateSetting', 'saveSettings', 'reloadSettings'])
 
 const permissionRows = computed(() => [
+  {
+    key: 'testChannel',
+    icon: Activity,
+    title: props.t('settings.permissions.testChannel'),
+  },
   {
     key: 'createChannel',
     icon: PlusCircle,

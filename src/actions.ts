@@ -206,6 +206,7 @@ export function parseReportActions(report: string): OpsAction[] {
 }
 
 function permissionKey(action: string): keyof OpsSettings['aiExecution']['permissions'] | undefined {
+  if (action === 'test_channel') return 'testChannel'
   if (action === 'create_channel') return 'createChannel'
   if (action === 'update_channel') return 'updateChannel'
   if (action === 'disable_channel') return 'disableChannel'
@@ -214,6 +215,7 @@ function permissionKey(action: string): keyof OpsSettings['aiExecution']['permis
 }
 
 function confirmationKey(action: string): keyof OpsSettings['aiExecution']['confirmation'] | undefined {
+  if (action === 'test_channel') return 'testChannel'
   if (action === 'create_channel') return 'createChannel'
   if (action === 'update_channel') return 'updateChannel'
   if (action === 'disable_channel') return 'disableChannel'
