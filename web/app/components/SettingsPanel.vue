@@ -15,7 +15,6 @@ const props = defineProps({
   settings: { type: Object, default: null },
   loading: { type: Boolean, default: false },
   saving: { type: Boolean, default: false },
-  error: { type: String, default: '' },
   savedAt: { type: String, default: '' },
   t: { type: Function, required: true },
 })
@@ -105,8 +104,7 @@ function updateList(path, text, type = 'string') {
         </div>
 
         <div class="hero-actions">
-          <div v-if="error" class="error-text">{{ error }}</div>
-          <div v-else-if="savedAt" class="last-run">
+          <div v-if="savedAt" class="last-run">
             {{ t('settings.savedAt', { value: savedAt }) }}
           </div>
           <div class="buttons">

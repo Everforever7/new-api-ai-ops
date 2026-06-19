@@ -25,6 +25,14 @@ const dictionaries = {
       checking: '正在检查',
       error: '运行异常',
     },
+    errors: {
+      dismiss: '关闭错误提示',
+      statusLoadFailed: '状态加载失败',
+      channelsLoadFailed: '渠道快照加载失败',
+      runFailed: '手动检查失败',
+      settingsLoadFailed: '设置加载失败',
+      settingsSaveFailed: '设置保存失败',
+    },
     preferences: {
       language: '语言',
       theme: '主题',
@@ -134,6 +142,14 @@ const dictionaries = {
       ready: 'Ready',
       checking: 'Checking',
       error: 'Issue detected',
+    },
+    errors: {
+      dismiss: 'Dismiss error',
+      statusLoadFailed: 'Failed to load status',
+      channelsLoadFailed: 'Failed to load channel snapshot',
+      runFailed: 'Manual check failed',
+      settingsLoadFailed: 'Failed to load settings',
+      settingsSaveFailed: 'Failed to save settings',
     },
     preferences: {
       language: 'Language',

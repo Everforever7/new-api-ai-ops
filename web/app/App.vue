@@ -22,6 +22,7 @@ import BentoDashboard from './components/BentoDashboard.vue'
 import ReportPanel from './components/ReportPanel.vue'
 import ChannelsTable from './components/ChannelsTable.vue'
 import SettingsPanel from './components/SettingsPanel.vue'
+import ErrorToast from './components/ErrorToast.vue'
 
 const STORAGE_KEYS = {
   locale: 'new-api-ai-ops:locale',
@@ -36,8 +37,7 @@ const activeTab = ref('dashboard')
 const status = ref(null)
 const channels = ref([])
 const settings = ref(null)
-const uiError = ref('')
-const settingsError = ref('')
+const errorToasts = ref([])
 const refreshing = ref(false)
 const runningCheck = ref(false)
 const settingsLoading = ref(false)
@@ -56,7 +56,7 @@ const reportText = computed(() => status.value?.lastReport || t('report.empty'))
 const lastRunText = computed(() =>
   t('toolbar.lastRun', { value: formatDate(status.value?.lastRunAt) })
 )
-const latestError = computed(() => uiError.value || status.value?.lastError || '')
+const latestError = computed(() => status.value?.lastError || '')
 const visibleChannels = computed(() => channels.value.slice(0, 50))
 const themeToggleLabel = computed(() =>
   theme.value === 'dark'
@@ -154,6 +154,28 @@ function toggleTheme() {
   theme.value = theme.value === 'dark' ? 'light' : 'dark'
 }
 
+function errorMessage(error) {
+  return error instanceof Error ? error.message : String(error)
+}
+
+function notifyError(titleKey, error) {
+  const id = `${Date.now()}-${Math.random().toString(36).slice(2)}`
+  errorToasts.value = [
+    ...errorToasts.value.slice(-2),
+    {
+      id,
+      title: t(titleKey),
+      message: errorMessage(error),
+    },
+  ]
+
+  window.setTimeout(() => dismissToast(id), 6500)
+}
+
+function dismissToast(id) {
+  errorToasts.value = errorToasts.value.filter((toast) => toast.id !== id)
+}
+
 function clone(value) {
   return JSON.parse(JSON.stringify(value))
 }
@@ -211,15 +233,24 @@ function formatLatency(value) {
 // API ACTIONS
 async function refreshAll() {
   refreshing.value = true
-  uiError.value = ''
   try {
-    const [nextStatus, nextChannels] = await Promise.all([
-      getStatus(), getChannels().catch(() => []),
+    const [statusResult, channelsResult] = await Promise.allSettled([
+      getStatus(),
+      getChannels(),
     ])
-    status.value = nextStatus
-    channels.value = nextChannels
-  } catch (error) {
-    uiError.value = error instanceof Error ? error.message : String(error)
+
+    if (statusResult.status === 'fulfilled') {
+      status.value = statusResult.value
+    } else {
+      notifyError('errors.statusLoadFailed', statusResult.reason)
+    }
+
+    if (channelsResult.status === 'fulfilled') {
+      channels.value = channelsResult.value
+    } else {
+      channels.value = []
+      notifyError('errors.channelsLoadFailed', channelsResult.reason)
+    }
   } finally {
     refreshing.value = false
   }
@@ -227,12 +258,11 @@ async function refreshAll() {
 
 async function runManualCheck() {
   runningCheck.value = true
-  uiError.value = ''
   try {
     await requestRunCheck()
     await refreshAll()
   } catch (error) {
-    uiError.value = error instanceof Error ? error.message : String(error)
+    notifyError('errors.runFailed', error)
   } finally {
     runningCheck.value = false
   }
@@ -240,11 +270,10 @@ async function runManualCheck() {
 
 async function loadSettings() {
   settingsLoading.value = true
-  settingsError.value = ''
   try {
     settings.value = await getSettings()
   } catch (error) {
-    settingsError.value = error instanceof Error ? error.message : String(error)
+    notifyError('errors.settingsLoadFailed', error)
   } finally {
     settingsLoading.value = false
   }
@@ -254,12 +283,11 @@ async function saveSettings() {
   if (!settings.value) return
 
   settingsSaving.value = true
-  settingsError.value = ''
   try {
     settings.value = await requestSaveSettings(settings.value)
     settingsSavedAt.value = formatDate(new Date().toISOString())
   } catch (error) {
-    settingsError.value = error instanceof Error ? error.message : String(error)
+    notifyError('errors.settingsSaveFailed', error)
   } finally {
     settingsSaving.value = false
   }
@@ -289,7 +317,6 @@ onMounted(() => {
           :currentTabName="currentTabName"
           :runState="runState"
           :lastRunText="lastRunText"
-          :latestError="latestError"
           :refreshing="refreshing"
           :runningCheck="runningCheck"
           :slowestChannelText="slowestChannelText"
@@ -322,7 +349,6 @@ onMounted(() => {
           :settings="settings"
           :loading="settingsLoading"
           :saving="settingsSaving"
-          :error="settingsError"
           :savedAt="settingsSavedAt"
           :t="t"
           @updateSetting="updateSetting"
@@ -342,6 +368,12 @@ onMounted(() => {
       @update:activeTab="(id) => activeTab = id"
       @cycleLocale="cycleLocale"
       @toggleTheme="toggleTheme"
+    />
+
+    <ErrorToast
+      :toasts="errorToasts"
+      :t="t"
+      @dismiss="dismissToast"
     />
 
   </div>
