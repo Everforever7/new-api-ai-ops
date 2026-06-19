@@ -162,7 +162,6 @@ async function handleApi(
           llmBaseUrl: config.llm.baseUrl,
           llmModel: config.llm.model,
           hasDiscordWebhook: Boolean(config.discord.webhookUrl),
-          autoExecute: config.policy.autoExecute,
           reportIntervalMinutes: config.report.intervalMinutes,
         },
       })

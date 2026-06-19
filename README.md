@@ -19,7 +19,7 @@
 
 New API AI Ops 是一个独立的 Sidecar 运维助手，专为 `new-api` 设计。它从 `new-api` 的管理 API 采集渠道状态和调用日志，借助 OpenAI 兼容大模型自动生成运维巡检报告，并可将报告推送至 Discord Webhook。
 
-> **当前版本为只读模式** — 只生成报告，不会自动修改渠道配置。
+> **当前版本支持受控 AI 执行** — AI 可以提出动作，实际执行会经过设置页的权限、确认策略、保护规则与审计日志约束。
 
 ## ✨ 功能特性
 
@@ -28,6 +28,8 @@ New API AI Ops 是一个独立的 Sidecar 运维助手，专为 `new-api` 设计
 - 💬 **Discord 推送** — 通过 Webhook 自动将报告发送至 Discord 频道
 - 💾 **报告存档** — 所有报告自动保存至 `reports/` 目录
 - 🖥️ **管理面板** — 内置轻量级 Web 管理面板（Basic Auth 认证）
+- 🧩 **动作队列** — 将 AI 建议转为可确认、可拒绝、可审计的操作
+- 🛡️ **执行保护** — 支持能力开关、人工确认、保护渠道规则、冷却时间
 - ⏰ **定时调度** — 支持可配置间隔的定时巡检
 - 🐳 **Docker 部署** — 提供 GHCR 镜像，可直接与 `new-api` 同栈部署
 
@@ -137,6 +139,8 @@ bun run build
 | 🔄 手动巡检 | 触发一次手动检查（默认不发送 Discord） |
 | 📄 报告查看 | 查看最新生成的运维报告 |
 | 📡 渠道快照 | 查看脱敏后的渠道信息 |
+| 🤖 动作队列 | 查看 AI 建议动作，执行或拒绝待确认操作 |
+| ⚙️ 执行设置 | 配置 AI 能力权限、确认策略、保护渠道规则 |
 
 ## 🐳 Docker 部署
 
@@ -172,7 +176,6 @@ services:
       LLM_MODEL: "gpt-4.1-mini"
       DISCORD_WEBHOOK_URL: "${AI_OPS_DISCORD_WEBHOOK_URL}"
       REPORT_INTERVAL_MINUTES: "15"
-      AUTO_EXECUTE: "false"
       PANEL_ENABLED: "true"
       PANEL_USERNAME: "${AI_OPS_PANEL_USERNAME:-admin}"
       PANEL_PASSWORD: "${AI_OPS_PANEL_PASSWORD}"
@@ -228,7 +231,6 @@ services:
 | `REPORT_FAILURE_RATE_THRESHOLD` | 失败率告警阈值 | `0.3` |
 | `REPORT_TIMEZONE` | 报告时区 | `Asia/Hong_Kong` |
 | `REPORT_SAVE_DIR` | 报告保存目录 | `reports` |
-| `AUTO_EXECUTE` | 是否自动执行操作 | `false` |
 
 ### 管理面板
 
@@ -242,13 +244,12 @@ services:
 
 ## 🔒 安全模型
 
-当前版本为 **只读模式**，不会自动执行任何变更操作。
+当前版本已经具备受控执行能力，执行策略遵循以下原则：
 
-未来版本的执行策略将遵循以下原则：
-
-- ✅ 仅允许低风险操作自动执行
-- ⚠️ 创建、删除、调价、重新分组渠道等操作需要人工确认
-- 📝 所有操作记录审计日志
+- ✅ 支持的动作限定为测试渠道、低余额记录、创建渠道、修改渠道、禁用渠道、删除渠道
+- ⚠️ 创建、修改、禁用、删除渠道均受设置页权限与确认策略约束
+- 🛡️ 受保护的渠道 ID、分组、标签、名称、模型、类型会跳过 AI 修改
+- 📝 已执行、失败、拒绝的操作记录到 `data/action-audit.jsonl`
 - 🔀 Discord 报告与执行审批分离
 
 ## 📄 License

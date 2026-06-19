@@ -50,6 +50,24 @@ type RawAction = {
 
 const AUDIT_PATH = process.env.AI_OPS_ACTION_AUDIT_PATH?.trim() || 'data/action-audit.jsonl'
 const CHANNEL_STATUS_AUTO_DISABLED = 2
+const CREATE_CHANNEL_FIELDS = new Set([
+  'name',
+  'type',
+  'key',
+  'base_url',
+  'models',
+  'group',
+  'groups',
+  'tag',
+  'weight',
+  'priority',
+  'auto_ban',
+  'model_mapping',
+  'openai_organization',
+  'test_model',
+  'remark',
+])
+const CREATE_CHANNEL_MODES = new Set(['single', 'batch', 'multi_to_single'])
 
 function now() {
   return new Date().toISOString()
@@ -207,6 +225,10 @@ function mutatesChannel(action: string) {
   return Boolean(permissionKey(action))
 }
 
+function requiresExistingChannel(action: string) {
+  return ['update_channel', 'disable_channel', 'delete_channel'].includes(action)
+}
+
 function normalizeText(value: unknown) {
   return String(value || '').trim().toLowerCase()
 }
@@ -273,6 +295,46 @@ function isProtectedChannel(
   if (protectedByText(channel.models, rules.modelIncludes, 'includes')) {
     return 'channel models are protected'
   }
+  return undefined
+}
+
+function createPayloadProtectionReason(
+  action: OpsAction,
+  settings: OpsSettings
+) {
+  if (action.action !== 'create_channel' || !action.payload) return undefined
+  const payload = normalizeCreatePayload(action.payload)
+  const channel = isRecord(payload.channel) ? payload.channel : undefined
+  if (!channel) return undefined
+
+  return isProtectedChannel(action, settings, {
+    id: 0,
+    type: Number(channel.type || 0),
+    status: 1,
+    name: String(channel.name || ''),
+    group: String(channel.group || ''),
+    tag: channel.tag === undefined ? null : String(channel.tag),
+    models: String(channel.models || ''),
+  } as Channel)
+}
+
+function payloadRequirementReason(action: OpsAction) {
+  if (action.action === 'create_channel') {
+    if (!action.payload) return 'create_channel requires payload'
+
+    const payload = normalizeCreatePayload(action.payload)
+    const channel = isRecord(payload.channel) ? payload.channel : {}
+    if (!Object.keys(channel).length) return 'create_channel payload is empty'
+    if (!normalizeText(channel.key)) return 'create_channel requires channel key'
+  }
+
+  if (action.action === 'update_channel') {
+    if (!action.payload) return 'update_channel requires payload'
+    if (!Object.keys(sanitizeUpdatePayload(action.payload)).length) {
+      return 'update_channel payload has no allowed fields'
+    }
+  }
+
   return undefined
 }
 
@@ -382,7 +444,30 @@ async function evaluateAction(
     })
   }
 
+  const payloadReason = payloadRequirementReason(action)
+  if (payloadReason) {
+    return updateAction(action, {
+      status: 'blocked',
+      statusReason: payloadReason,
+    })
+  }
+
+  const createProtectedReason = createPayloadProtectionReason(action, settings)
+  if (createProtectedReason) {
+    return updateAction(action, {
+      status: 'blocked',
+      statusReason: createProtectedReason,
+    })
+  }
+
   const channel = await readChannel(client, action.channelId)
+  if (requiresExistingChannel(action.action) && !channel) {
+    return updateAction(action, {
+      status: 'blocked',
+      statusReason: 'channel could not be verified',
+    })
+  }
+
   const protectedReason = isProtectedChannel(action, settings, channel)
   if (protectedReason) {
     return updateAction(action, {
@@ -466,16 +551,33 @@ async function executeWithClient(
 }
 
 function normalizeCreatePayload(payload: Record<string, unknown>) {
-  if (isRecord(payload.channel)) {
-    return {
-      ...payload,
-      channel: normalizeChannelPayload(payload.channel),
-    }
+  const source = isRecord(payload.channel) ? payload : { channel: payload }
+  const mode =
+    typeof source.mode === 'string' && CREATE_CHANNEL_MODES.has(source.mode)
+      ? source.mode
+      : 'single'
+  const result: Record<string, unknown> = {
+    mode,
+    channel: sanitizeCreateChannelPayload(
+      isRecord(source.channel) ? source.channel : {}
+    ),
   }
+
+  if (mode === 'multi_to_single' && typeof source.multi_key_mode === 'string') {
+    result.multi_key_mode = source.multi_key_mode
+  }
+
   return {
-    mode: 'single',
-    channel: normalizeChannelPayload(payload),
+    ...result,
   }
+}
+
+function sanitizeCreateChannelPayload(payload: Record<string, unknown>) {
+  return normalizeChannelPayload(
+    Object.fromEntries(
+      Object.entries(payload).filter(([key]) => CREATE_CHANNEL_FIELDS.has(key))
+    )
+  )
 }
 
 function sanitizeUpdatePayload(payload: Record<string, unknown>) {
@@ -647,6 +749,21 @@ async function evaluateManualAction(
   }
 
   const channel = await readChannel(client, action.channelId)
+  if (requiresExistingChannel(action.action) && !channel) {
+    return updateAction(action, {
+      status: 'blocked',
+      statusReason: 'channel could not be verified',
+    })
+  }
+
+  const createProtectedReason = createPayloadProtectionReason(action, settings)
+  if (createProtectedReason) {
+    return updateAction(action, {
+      status: 'blocked',
+      statusReason: createProtectedReason,
+    })
+  }
+
   const protectedReason = isProtectedChannel(action, settings, channel)
   if (protectedReason) {
     return updateAction(action, {

@@ -145,7 +145,6 @@ export async function collectHealthSnapshot(
     policy: {
       minRequests: config.report.minRequests,
       failureRateThreshold: config.report.failureRateThreshold,
-      autoExecute: config.policy.autoExecute,
     },
   }
 }

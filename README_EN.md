@@ -19,7 +19,7 @@ English | [简体中文](./README.md)
 
 New API AI Ops is a standalone sidecar operations assistant designed for `new-api`. It collects channel status and call logs from `new-api`'s management APIs, leverages an OpenAI-compatible LLM to generate automated operations inspection reports, and can optionally push reports to a Discord webhook.
 
-> **The current version is read-only** — it only generates reports and does not automatically modify channel configurations.
+> **The current version supports controlled AI execution** — AI can propose actions, while actual execution is gated by panel permissions, confirmation strategies, protected channel rules, and audit logs.
 
 ## ✨ Features
 
@@ -28,6 +28,8 @@ New API AI Ops is a standalone sidecar operations assistant designed for `new-ap
 - 💬 **Discord Push** — Automatically sends reports to Discord channels via webhook
 - 💾 **Report Archive** — All reports are automatically saved to the `reports/` directory
 - 🖥️ **Management Panel** — Built-in lightweight web management panel (Basic Auth)
+- 🧩 **Action Queue** — Converts AI proposals into confirmable, rejectable, auditable operations
+- 🛡️ **Execution Guards** — Supports capability switches, manual confirmation, protected channel rules, and cooldowns
 - ⏰ **Scheduled Inspections** — Supports configurable interval-based scheduled inspections
 - 🐳 **Docker Deployment** — GHCR image available, can be deployed alongside `new-api` in the same stack
 
@@ -137,6 +139,8 @@ bun run build
 | 🔄 Manual Inspection | Trigger a manual check (no Discord by default) |
 | 📄 Report View | View the latest generated operations report |
 | 📡 Channel Snapshot | View sanitized channel information |
+| 🤖 Action Queue | Review AI-proposed actions, execute or reject pending operations |
+| ⚙️ Execution Settings | Configure AI permissions, confirmation strategy, and protected channel rules |
 
 ## 🐳 Docker Deployment
 
@@ -172,7 +176,6 @@ services:
       LLM_MODEL: "gpt-4.1-mini"
       DISCORD_WEBHOOK_URL: "${AI_OPS_DISCORD_WEBHOOK_URL}"
       REPORT_INTERVAL_MINUTES: "15"
-      AUTO_EXECUTE: "false"
       PANEL_ENABLED: "true"
       PANEL_USERNAME: "${AI_OPS_PANEL_USERNAME:-admin}"
       PANEL_PASSWORD: "${AI_OPS_PANEL_PASSWORD}"
@@ -228,7 +231,6 @@ services:
 | `REPORT_FAILURE_RATE_THRESHOLD` | Failure rate alert threshold | `0.3` |
 | `REPORT_TIMEZONE` | Report timezone | `Asia/Hong_Kong` |
 | `REPORT_SAVE_DIR` | Report save directory | `reports` |
-| `AUTO_EXECUTE` | Enable auto-execution of actions | `false` |
 
 ### Management Panel
 
@@ -242,13 +244,12 @@ services:
 
 ## 🔒 Safety Model
 
-The current version is **read-only** and will not automatically execute any modification operations.
+The current version supports controlled execution with these rules:
 
-Future version execution policies will follow these principles:
-
-- ✅ Only allow automatic execution of low-risk operations
-- ⚠️ Creating, deleting, repricing, or regrouping channels requires manual confirmation
-- 📝 All operations are recorded in audit logs
+- ✅ Supported actions are limited to testing channels, recording low-balance notices, creating channels, updating channels, disabling channels, and deleting channels
+- ⚠️ Creating, updating, disabling, and deleting channels are gated by panel permissions and confirmation strategy
+- 🛡️ Protected channel IDs, groups, tags, names, models, and types are skipped for AI modification
+- 📝 Executed, failed, and rejected operations are recorded in `data/action-audit.jsonl`
 - 🔀 Discord reports and execution approvals are kept separate
 
 ## 📄 License

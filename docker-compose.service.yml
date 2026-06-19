@@ -19,7 +19,6 @@ services:
       DISCORD_WEBHOOK_URL: "${AI_OPS_DISCORD_WEBHOOK_URL}"
       REPORT_INTERVAL_MINUTES: "15"
       NEWAPI_LOG_HOURS: "1"
-      AUTO_EXECUTE: "false"
       PANEL_ENABLED: "true"
       PANEL_HOST: "0.0.0.0"
       PANEL_PORT: "8787"

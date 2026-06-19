@@ -126,6 +126,5 @@ export type HealthSnapshot = {
   policy: {
     minRequests: number
     failureRateThreshold: number
-    autoExecute: boolean
   }
 }

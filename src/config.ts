@@ -30,9 +30,6 @@ export type AppConfig = {
     saveDir: string
     includeRawSummary: boolean
   }
-  policy: {
-    autoExecute: boolean
-  }
   panel: {
     enabled: boolean
     host: string
@@ -114,9 +111,6 @@ export function loadConfig(): AppConfig {
       timezone: process.env.REPORT_TIMEZONE?.trim() || 'Asia/Hong_Kong',
       saveDir: process.env.REPORT_SAVE_DIR?.trim() || 'reports',
       includeRawSummary: booleanEnv('REPORT_INCLUDE_RAW_SUMMARY'),
-    },
-    policy: {
-      autoExecute: booleanEnv('AUTO_EXECUTE'),
     },
     panel: {
       enabled: booleanEnv('PANEL_ENABLED', true),
