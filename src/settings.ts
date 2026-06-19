@@ -103,8 +103,8 @@ const DEFAULT_SETTINGS: OpsSettings = {
     },
     protectedChannels: {
       ids: [],
-      groups: ['vip', 'production-core'],
-      tags: ['protected', 'no-ai'],
+      groups: [],
+      tags: [],
       nameIncludes: [],
       modelIncludes: [],
       types: [],
@@ -387,31 +387,11 @@ export function normalizeOpsSettings(
           'ids',
           defaults.aiExecution.protectedChannels.ids
         ),
-        groups: readStringArray(
-          protectedChannels,
-          'groups',
-          defaults.aiExecution.protectedChannels.groups
-        ),
-        tags: readStringArray(
-          protectedChannels,
-          'tags',
-          defaults.aiExecution.protectedChannels.tags
-        ),
-        nameIncludes: readStringArray(
-          protectedChannels,
-          'nameIncludes',
-          defaults.aiExecution.protectedChannels.nameIncludes
-        ),
-        modelIncludes: readStringArray(
-          protectedChannels,
-          'modelIncludes',
-          defaults.aiExecution.protectedChannels.modelIncludes
-        ),
-        types: readNumberArray(
-          protectedChannels,
-          'types',
-          defaults.aiExecution.protectedChannels.types
-        ),
+        groups: [],
+        tags: [],
+        nameIncludes: [],
+        modelIncludes: [],
+        types: [],
       },
     },
   }

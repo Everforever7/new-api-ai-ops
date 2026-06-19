@@ -1,10 +1,49 @@
 <script setup>
+import { computed, ref } from 'vue'
+import { Search, ShieldCheck } from 'lucide-vue-next'
+
 const props = defineProps({
-  visibleChannels: { type: Array, required: true },
+  channels: { type: Array, required: true },
+  settings: { type: Object, default: null },
+  protectedSavingIds: { type: Array, default: () => [] },
   t: { type: Function, required: true },
   formatBalance: { type: Function, required: true },
   formatLatency: { type: Function, required: true }
 })
+
+const emit = defineEmits(['toggleProtectedChannel'])
+const query = ref('')
+
+const protectedChannelIds = computed(() => {
+  const ids = props.settings?.aiExecution?.protectedChannels?.ids
+  return new Set(
+    Array.isArray(ids) ? ids.map(Number).filter(Number.isInteger) : []
+  )
+})
+
+const filteredChannels = computed(() => {
+  const text = query.value.trim().toLowerCase()
+  if (!text) return props.channels
+
+  return props.channels.filter((channel) => {
+    return [
+      channel.id,
+      channel.name,
+      channel.group,
+      channel.tag,
+      channel.models,
+      channel.type,
+      channel.priority,
+      channel.weight,
+    ]
+      .filter((value) => value !== undefined && value !== null)
+      .join(' ')
+      .toLowerCase()
+      .includes(text)
+  })
+})
+
+const protectedCount = computed(() => protectedChannelIds.value.size)
 
 function formatChannelStatus(channel) {
   if (channel.status === 1) return props.t('channelStatus.enabled')
@@ -18,6 +57,33 @@ function channelStatusClass(channel) {
   if (channel.status === 2) return 'warn'
   return 'danger'
 }
+
+function isProtected(channelId) {
+  return protectedChannelIds.value.has(Number(channelId))
+}
+
+function isSaving(channelId) {
+  return props.protectedSavingIds.includes(Number(channelId))
+}
+
+function detailParts(channel) {
+  return [
+    channel.group ? `${props.t('channels.group')}: ${channel.group}` : '',
+    channel.tag ? `${props.t('channels.tag')}: ${channel.tag}` : '',
+    channel.type !== undefined ? `${props.t('channels.type')}: ${channel.type}` : '',
+  ].filter(Boolean)
+}
+
+function weightText(channel) {
+  const parts = []
+  if (channel.priority !== undefined && channel.priority !== null) {
+    parts.push(`${props.t('channels.priority')}: ${channel.priority}`)
+  }
+  if (channel.weight !== undefined && channel.weight !== null) {
+    parts.push(`${props.t('channels.weight')}: ${channel.weight}`)
+  }
+  return parts.join(' / ') || props.t('common.emptyValue')
+}
 </script>
 
 <template>
@@ -27,38 +93,94 @@ function channelStatusClass(channel) {
         <h2>{{ t('channels.title') }}</h2>
         <div class="status-pill warn">
           <div class="status-dot"></div>
-          {{ visibleChannels.length }} {{ t('channels.title') }}
+          {{ t('channels.summary', { visible: filteredChannels.length, total: channels.length }) }}
         </div>
       </div>
     </article>
 
     <article class="bento-item bento-full adaptive-bento">
-       <div class="bento-body bento-table-wrap">
-         <table>
+      <div class="bento-header channels-toolbar">
+        <div>
+          <h3>{{ t('channels.listTitle') }}</h3>
+          <p class="settings-help-text">
+            {{ t('channels.protectionHint', { count: protectedCount }) }}
+          </p>
+        </div>
+        <label class="channels-search" :aria-label="t('channels.search')">
+          <Search :size="16" />
+          <input
+            v-model="query"
+            type="search"
+            autocomplete="off"
+            :placeholder="t('channels.searchPlaceholder')"
+          />
+        </label>
+      </div>
+
+       <div class="bento-body bento-table-wrap channels-table-wrap">
+         <table class="channels-table">
            <thead>
              <tr>
                <th>{{ t('channels.id') }}</th>
                <th>{{ t('channels.name') }}</th>
+               <th>{{ t('channels.models') }}</th>
                <th>{{ t('channels.status') }}</th>
+               <th>{{ t('channels.weighting') }}</th>
                <th>{{ t('channels.balance') }}</th>
                <th>{{ t('channels.latency') }}</th>
+               <th>{{ t('channels.aiProtection') }}</th>
              </tr>
            </thead>
            <tbody>
-             <tr v-if="!visibleChannels.length">
-               <td colspan="5" class="empty">{{ t('channels.empty') }}</td>
+             <tr v-if="!channels.length">
+               <td colspan="8" class="empty">{{ t('channels.empty') }}</td>
              </tr>
-             <tr v-for="channel in visibleChannels" :key="channel.id">
+             <tr v-else-if="!filteredChannels.length">
+               <td colspan="8" class="empty">{{ t('channels.noMatches') }}</td>
+             </tr>
+             <tr v-for="channel in filteredChannels" :key="channel.id">
                <td class="channel-id">{{ channel.id }}</td>
-               <td>{{ channel.name }}</td>
+               <td>
+                 <div class="channel-main-cell">
+                   <strong>{{ channel.name || `#${channel.id}` }}</strong>
+                   <small>{{ detailParts(channel).join(' · ') || t('common.emptyValue') }}</small>
+                 </div>
+               </td>
+               <td>
+                 <div class="channel-models-cell">
+                   {{ channel.models || t('common.emptyValue') }}
+                 </div>
+               </td>
                <td>
                  <span class="status-pill compact" :class="channelStatusClass(channel)">
                    <span class="status-dot"></span>
                    {{ formatChannelStatus(channel) }}
                  </span>
                </td>
+               <td class="font-mono">{{ weightText(channel) }}</td>
                <td class="font-mono">{{ formatBalance(channel.balance) }}</td>
                <td class="font-mono">{{ formatLatency(channel.responseTimeMs) }}</td>
+               <td>
+                 <button
+                   class="channel-protect-btn"
+                   :class="{ active: isProtected(channel.id) }"
+                   type="button"
+                   :disabled="!settings || isSaving(channel.id)"
+                   :aria-pressed="isProtected(channel.id)"
+                   @click="emit('toggleProtectedChannel', channel.id)"
+                 >
+                   <ShieldCheck :size="15" />
+                   <span>
+                     {{
+                       isSaving(channel.id)
+                         ? t('channels.savingProtection')
+                         : isProtected(channel.id)
+                           ? t('channels.protected')
+                           : t('channels.unprotected')
+                     }}
+                   </span>
+                 </button>
+               </td>
              </tr>
            </tbody>
          </table>

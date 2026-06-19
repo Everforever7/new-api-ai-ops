@@ -67,6 +67,7 @@ const assistantSending = ref(false)
 const assistantResetting = ref(false)
 const llmModels = ref([])
 const llmModelsLoading = ref(false)
+const protectedSavingIds = ref([])
 
 const tabs = computed(() => [
   { id: 'dashboard', label: t('tabs.dashboard'), icon: LayoutDashboard },
@@ -83,7 +84,6 @@ const lastRunText = computed(() =>
   t('toolbar.lastRun', { value: formatDate(status.value?.lastRunAt) })
 )
 const latestError = computed(() => status.value?.lastError || '')
-const visibleChannels = computed(() => channels.value.slice(0, 50))
 const themeToggleLabel = computed(() =>
   theme.value === 'dark'
     ? t('preferences.switchToLight')
@@ -379,6 +379,38 @@ async function fetchLlmModels() {
   }
 }
 
+async function toggleProtectedChannel(channelId) {
+  if (!settings.value) return
+
+  const id = Number(channelId)
+  if (!Number.isInteger(id)) return
+
+  protectedSavingIds.value = [...new Set([...protectedSavingIds.value, id])]
+  try {
+    const next = clone(settings.value)
+    const protectedChannels = next.aiExecution.protectedChannels
+    const ids = new Set(
+      Array.isArray(protectedChannels.ids)
+        ? protectedChannels.ids.map(Number).filter(Number.isInteger)
+        : []
+    )
+
+    if (ids.has(id)) {
+      ids.delete(id)
+    } else {
+      ids.add(id)
+    }
+
+    protectedChannels.ids = [...ids].sort((a, b) => a - b)
+    settings.value = await requestSaveSettings(next)
+    settingsSavedAt.value = formatDate(new Date().toISOString())
+  } catch (error) {
+    notifyError('errors.protectedChannelSaveFailed', error)
+  } finally {
+    protectedSavingIds.value = protectedSavingIds.value.filter((item) => item !== id)
+  }
+}
+
 async function executeAction(actionId) {
   executingActionIds.value = [...new Set([...executingActionIds.value, actionId])]
   try {
@@ -460,6 +492,7 @@ function resetAuthenticatedState() {
   assistantResetting.value = false
   llmModels.value = []
   llmModelsLoading.value = false
+  protectedSavingIds.value = []
 }
 
 function handleUnauthorized() {
@@ -536,10 +569,13 @@ onBeforeUnmount(() => {
         <ChannelsTable 
           v-else-if="activeTab === 'channels'" 
           key="channels"
-          :visibleChannels="visibleChannels"
+          :channels="channels"
+          :settings="settings"
+          :protectedSavingIds="protectedSavingIds"
           :t="t"
           :formatBalance="formatBalance"
           :formatLatency="formatLatency"
+          @toggleProtectedChannel="toggleProtectedChannel"
         />
 
         <ActionsPanel

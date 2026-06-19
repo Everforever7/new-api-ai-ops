@@ -538,7 +538,10 @@ async function evaluateAction(
     })
   }
 
-  const protectedReason = isProtectedChannel(action, settings, channel)
+  const protectedReason =
+    action.action === 'test_channel'
+      ? undefined
+      : isProtectedChannel(action, settings, channel)
   if (protectedReason) {
     return updateAction(action, {
       status: 'blocked',
@@ -886,7 +889,10 @@ async function evaluateManualAction(
     })
   }
 
-  const protectedReason = isProtectedChannel(action, settings, channel)
+  const protectedReason =
+    action.action === 'test_channel'
+      ? undefined
+      : isProtectedChannel(action, settings, channel)
   if (protectedReason) {
     return updateAction(action, {
       status: 'blocked',

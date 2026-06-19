@@ -133,11 +133,6 @@ const settingsTabs = computed(() => [
     icon: KeyRound,
     label: props.t('settings.llm.title'),
   },
-  {
-    id: 'protected',
-    icon: Lock,
-    label: props.t('settings.protected.title'),
-  },
 ])
 
 function settingValue(path) {
@@ -157,25 +152,6 @@ function toggleClearApiKey() {
   const next = !settingValue('llm.clearApiKey')
   update('llm.clearApiKey', next)
   if (next) update('llm.apiKey', '')
-}
-
-function listText(path) {
-  const value = settingValue(path)
-  return Array.isArray(value) ? value.join('\n') : ''
-}
-
-function updateList(path, text, type = 'string') {
-  const parts = text
-    .split(/[\n,]/g)
-    .map((item) => item.trim())
-    .filter(Boolean)
-
-  const value =
-    type === 'number'
-      ? [...new Set(parts.map(Number).filter((item) => Number.isInteger(item)))]
-      : [...new Set(parts)]
-
-  update(path, value)
 }
 
 function logout() {
@@ -583,86 +559,6 @@ function logout() {
             </div>
           </div>
 
-          <div
-            v-else-if="activeSettingsTab === 'protected'"
-            class="settings-protected-grid"
-            role="tabpanel"
-          >
-            <label class="settings-field">
-              <span>{{ t('settings.protected.ids') }}</span>
-              <textarea
-                :value="listText('aiExecution.protectedChannels.ids')"
-                @input="
-                  updateList(
-                    'aiExecution.protectedChannels.ids',
-                    $event.target.value,
-                    'number'
-                  )
-                "
-              ></textarea>
-            </label>
-            <label class="settings-field">
-              <span>{{ t('settings.protected.groups') }}</span>
-              <textarea
-                :value="listText('aiExecution.protectedChannels.groups')"
-                @input="
-                  updateList(
-                    'aiExecution.protectedChannels.groups',
-                    $event.target.value
-                  )
-                "
-              ></textarea>
-            </label>
-            <label class="settings-field">
-              <span>{{ t('settings.protected.tags') }}</span>
-              <textarea
-                :value="listText('aiExecution.protectedChannels.tags')"
-                @input="
-                  updateList(
-                    'aiExecution.protectedChannels.tags',
-                    $event.target.value
-                  )
-                "
-              ></textarea>
-            </label>
-            <label class="settings-field">
-              <span>{{ t('settings.protected.names') }}</span>
-              <textarea
-                :value="listText('aiExecution.protectedChannels.nameIncludes')"
-                @input="
-                  updateList(
-                    'aiExecution.protectedChannels.nameIncludes',
-                    $event.target.value
-                  )
-                "
-              ></textarea>
-            </label>
-            <label class="settings-field">
-              <span>{{ t('settings.protected.models') }}</span>
-              <textarea
-                :value="listText('aiExecution.protectedChannels.modelIncludes')"
-                @input="
-                  updateList(
-                    'aiExecution.protectedChannels.modelIncludes',
-                    $event.target.value
-                  )
-                "
-              ></textarea>
-            </label>
-            <label class="settings-field">
-              <span>{{ t('settings.protected.types') }}</span>
-              <textarea
-                :value="listText('aiExecution.protectedChannels.types')"
-                @input="
-                  updateList(
-                    'aiExecution.protectedChannels.types',
-                    $event.target.value,
-                    'number'
-                  )
-                "
-              ></textarea>
-            </label>
-          </div>
         </div>
       </article>
     </template>
