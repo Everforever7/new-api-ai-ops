@@ -29,3 +29,14 @@ export function runCheck() {
     body: '{}',
   })
 }
+
+export function getSettings() {
+  return api('/api/settings')
+}
+
+export function saveSettings(settings) {
+  return api('/api/settings', {
+    method: 'PUT',
+    body: JSON.stringify(settings),
+  })
+}

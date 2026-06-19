@@ -5,6 +5,7 @@ import type { Channel } from '../types/domain'
 import { NewApiClient } from '../newapi/client'
 import { OpsRuntime } from '../runtime'
 import { logger } from '../logger'
+import { loadOpsSettings, saveOpsSettings } from '../settings'
 
 type JsonValue = Record<string, unknown> | unknown[]
 
@@ -181,6 +182,17 @@ async function handleApi(
       const client = new NewApiClient(config.newApi)
       const data = await client.getChannels()
       return json(data.items.map(sanitizeChannel))
+    }
+
+    if (url.pathname === '/api/settings' && req.method === 'GET') {
+      return json(await loadOpsSettings())
+    }
+
+    if (url.pathname === '/api/settings' && req.method === 'PUT') {
+      const body = await req.json().catch(() => {
+        throw new Error('invalid settings JSON')
+      })
+      return json(await saveOpsSettings(body))
     }
 
     return jsonError('not found', 404)

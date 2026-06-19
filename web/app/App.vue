@@ -5,8 +5,15 @@ import {
   LayoutDashboard,
   FileText,
   Radio,
+  Settings2,
 } from 'lucide-vue-next'
-import { getChannels, getStatus, runCheck as requestRunCheck } from './api.js'
+import {
+  getChannels,
+  getSettings,
+  getStatus,
+  runCheck as requestRunCheck,
+  saveSettings as requestSaveSettings,
+} from './api.js'
 import { LANGUAGES, resolveLocale, translate } from './i18n.js'
 
 // Import Sub-components
@@ -14,6 +21,7 @@ import FloatingDock from './components/FloatingDock.vue'
 import BentoDashboard from './components/BentoDashboard.vue'
 import ReportPanel from './components/ReportPanel.vue'
 import ChannelsTable from './components/ChannelsTable.vue'
+import SettingsPanel from './components/SettingsPanel.vue'
 
 const STORAGE_KEYS = {
   locale: 'new-api-ai-ops:locale',
@@ -27,14 +35,20 @@ const theme = ref(resolveTheme(readStoredValue(STORAGE_KEYS.theme)))
 const activeTab = ref('dashboard')
 const status = ref(null)
 const channels = ref([])
+const settings = ref(null)
 const uiError = ref('')
+const settingsError = ref('')
 const refreshing = ref(false)
 const runningCheck = ref(false)
+const settingsLoading = ref(false)
+const settingsSaving = ref(false)
+const settingsSavedAt = ref('')
 
 const tabs = computed(() => [
   { id: 'dashboard', label: t('tabs.dashboard'), icon: LayoutDashboard },
   { id: 'report', label: t('tabs.report'), icon: FileText },
   { id: 'channels', label: t('tabs.channels'), icon: Radio },
+  { id: 'settings', label: t('tabs.settings'), icon: Settings2 },
 ])
 
 const snapshot = computed(() => status.value?.lastSnapshot)
@@ -140,6 +154,24 @@ function toggleTheme() {
   theme.value = theme.value === 'dark' ? 'light' : 'dark'
 }
 
+function clone(value) {
+  return JSON.parse(JSON.stringify(value))
+}
+
+function updateSetting(path, value) {
+  if (!settings.value) return
+
+  const next = clone(settings.value)
+  const parts = path.split('.')
+  let target = next
+  for (const part of parts.slice(0, -1)) {
+    target = target[part]
+  }
+  target[parts.at(-1)] = value
+  settings.value = next
+  settingsSavedAt.value = ''
+}
+
 // FORMATTING HELPERS (passed as props)
 function formatDate(value) {
   if (!value) return t('common.emptyValue')
@@ -206,8 +238,36 @@ async function runManualCheck() {
   }
 }
 
+async function loadSettings() {
+  settingsLoading.value = true
+  settingsError.value = ''
+  try {
+    settings.value = await getSettings()
+  } catch (error) {
+    settingsError.value = error instanceof Error ? error.message : String(error)
+  } finally {
+    settingsLoading.value = false
+  }
+}
+
+async function saveSettings() {
+  if (!settings.value) return
+
+  settingsSaving.value = true
+  settingsError.value = ''
+  try {
+    settings.value = await requestSaveSettings(settings.value)
+    settingsSavedAt.value = formatDate(new Date().toISOString())
+  } catch (error) {
+    settingsError.value = error instanceof Error ? error.message : String(error)
+  } finally {
+    settingsSaving.value = false
+  }
+}
+
 onMounted(() => {
   refreshAll()
+  loadSettings()
 })
 </script>
 
@@ -254,6 +314,20 @@ onMounted(() => {
           :t="t"
           :formatBalance="formatBalance"
           :formatLatency="formatLatency"
+        />
+
+        <SettingsPanel
+          v-else-if="activeTab === 'settings'"
+          key="settings"
+          :settings="settings"
+          :loading="settingsLoading"
+          :saving="settingsSaving"
+          :error="settingsError"
+          :savedAt="settingsSavedAt"
+          :t="t"
+          @updateSetting="updateSetting"
+          @saveSettings="saveSettings"
+          @reloadSettings="loadSettings"
         />
 
       </Transition>
