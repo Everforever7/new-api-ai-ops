@@ -11,6 +11,8 @@ import {
   Trash2,
 } from 'lucide-vue-next'
 
+import CustomSelect from './CustomSelect.vue'
+
 const props = defineProps({
   settings: { type: Object, default: null },
   loading: { type: Boolean, default: false },
@@ -129,7 +131,7 @@ function updateList(path, text, type = 'string') {
         </div>
       </article>
 
-      <article class="bento-item bento-wide">
+      <article class="bento-item high-density">
         <div class="bento-flex-row">
           <div class="bento-icon-wrapper">
             <ShieldCheck :size="28" />
@@ -154,7 +156,7 @@ function updateList(path, text, type = 'string') {
         </div>
       </article>
 
-      <article class="bento-item bento-wide">
+      <article class="bento-item high-density">
         <div class="bento-header">
           <div class="bento-icon-wrapper">
             <SlidersHorizontal :size="24" />
@@ -207,7 +209,7 @@ function updateList(path, text, type = 'string') {
         </div>
       </article>
 
-      <article class="bento-item bento-full settings-matrix">
+      <article class="bento-item bento-full settings-matrix high-density">
         <div class="bento-header">
           <h3>{{ t('settings.permissions.title') }}</h3>
         </div>
@@ -249,24 +251,16 @@ function updateList(path, text, type = 'string') {
                   </button>
                 </td>
                 <td>
-                  <select
-                    class="settings-select"
-                    :value="settingValue(`aiExecution.confirmation.${row.key}`)"
+                  <CustomSelect
+                    :modelValue="settingValue(`aiExecution.confirmation.${row.key}`)"
+                    :options="confirmationOptions"
                     @change="
                       update(
                         `aiExecution.confirmation.${row.key}`,
-                        $event.target.value
+                        $event
                       )
                     "
-                  >
-                    <option
-                      v-for="option in confirmationOptions"
-                      :key="option.value"
-                      :value="option.value"
-                    >
-                      {{ option.label }}
-                    </option>
-                  </select>
+                  />
                 </td>
               </tr>
             </tbody>
@@ -274,7 +268,7 @@ function updateList(path, text, type = 'string') {
         </div>
       </article>
 
-      <article class="bento-item bento-full settings-protected">
+      <article class="bento-item bento-full settings-protected high-density">
         <div class="bento-header">
           <h3>{{ t('settings.protected.title') }}</h3>
         </div>
