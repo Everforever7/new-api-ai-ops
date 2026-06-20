@@ -282,7 +282,10 @@ export class OpsRuntime {
     }
 
     logger.info('running channel tests before report')
-    await this.runChannelTests({ triggeredBy: 'report' })
+    await this.runChannelTests(
+      { triggeredBy: 'report' },
+      { createActionDrafts: false }
+    )
   }
 
   async runChannelTests(

@@ -5,8 +5,8 @@ import { NewApiClient } from './client'
 const LOG_TYPE_CONSUME = 2
 const LOG_TYPE_ERROR = 5
 const CHANNEL_STATUS_ENABLED = 1
-const CHANNEL_STATUS_MANUAL_DISABLED = 0
-const CHANNEL_STATUS_AUTO_DISABLED = 2
+const CHANNEL_STATUS_MANUAL_DISABLED = 2
+const CHANNEL_STATUS_AUTO_DISABLED = 3
 
 function countBy<T>(
   items: T[],

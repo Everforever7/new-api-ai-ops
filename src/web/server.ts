@@ -152,7 +152,8 @@ async function servePanelAsset(url: URL) {
 
 function statusLabel(status: number) {
   if (status === 1) return 'enabled'
-  if (status === 2) return 'auto disabled'
+  if (status === 2) return 'manual disabled'
+  if (status === 3) return 'auto disabled'
   if (status === 0) return 'disabled'
   return String(status)
 }

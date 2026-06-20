@@ -79,14 +79,15 @@ const protectedCount = computed(() => protectedChannelIds.value.size)
 
 function formatChannelStatus(channel) {
   if (channel.status === 1) return props.t('channelStatus.enabled')
-  if (channel.status === 2) return props.t('channelStatus.autoDisabled')
+  if (channel.status === 2) return props.t('channelStatus.disabled')
+  if (channel.status === 3) return props.t('channelStatus.autoDisabled')
   if (channel.status === 0) return props.t('channelStatus.disabled')
   return channel.statusLabel || props.t('channelStatus.unknown')
 }
 
 function channelStatusClass(channel) {
   if (channel.status === 1) return 'ok'
-  if (channel.status === 2) return 'warn'
+  if (channel.status === 3) return 'warn'
   return 'danger'
 }
 

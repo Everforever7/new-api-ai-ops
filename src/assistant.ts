@@ -90,6 +90,9 @@ const MAX_HISTORY_MESSAGES = 12
 const MAX_MESSAGE_LENGTH = 6000
 const LOG_TYPE_CONSUME = 2
 const LOG_TYPE_ERROR = 5
+const CHANNEL_STATUS_ENABLED = 1
+const CHANNEL_STATUS_MANUAL_DISABLED = 2
+const CHANNEL_STATUS_AUTO_DISABLED = 3
 
 const CORE_ASSISTANT_SYSTEM_PROMPT = [
   '你是 new-api AI 运维助手，负责把自然语言整理成动作草稿。',
@@ -485,9 +488,9 @@ function buildAssistantChannelSummary(channels: Channel[]) {
 
   return {
     total: channels.length,
-    enabled: statusCounts.get(1) || 0,
-    manuallyDisabled: statusCounts.get(0) || 0,
-    autoDisabled: statusCounts.get(2) || 0,
+    enabled: statusCounts.get(CHANNEL_STATUS_ENABLED) || 0,
+    manuallyDisabled: statusCounts.get(CHANNEL_STATUS_MANUAL_DISABLED) || 0,
+    autoDisabled: statusCounts.get(CHANNEL_STATUS_AUTO_DISABLED) || 0,
     statusCounts: Object.fromEntries(
       [...statusCounts.entries()].map(([status, count]) => [
         channelStatusLabel(status),
@@ -628,8 +631,9 @@ function numericOrUndefined(value: unknown) {
 }
 
 function channelStatusLabel(status: number) {
-  if (status === 1) return 'enabled'
-  if (status === 2) return 'auto_disabled'
+  if (status === CHANNEL_STATUS_ENABLED) return 'enabled'
+  if (status === CHANNEL_STATUS_MANUAL_DISABLED) return 'manual_disabled'
+  if (status === CHANNEL_STATUS_AUTO_DISABLED) return 'auto_disabled'
   if (status === 0) return 'disabled'
   return String(status)
 }

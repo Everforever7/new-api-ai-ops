@@ -65,7 +65,7 @@ export type RawAction = {
 
 const AUDIT_PATH = process.env.AI_OPS_ACTION_AUDIT_PATH?.trim() || 'data/action-audit.jsonl'
 const CHANNEL_STATUS_ENABLED = 1
-const CHANNEL_STATUS_AUTO_DISABLED = 2
+const CHANNEL_STATUS_AUTO_DISABLED = 3
 const REDACTED_VALUE = '[REDACTED]'
 const CREATE_CHANNEL_FIELDS = new Set([
   'name',
@@ -993,8 +993,7 @@ export async function buildActiveTestActionDrafts(
     }
 
     if (
-      memory.channelStatus !== undefined &&
-      memory.channelStatus !== CHANNEL_STATUS_ENABLED &&
+      memory.channelStatus === CHANNEL_STATUS_AUTO_DISABLED &&
       memory.testSummary.lastStatus === 'success' &&
       (memory.testSummary.consecutiveSuccesses || 0) >= recoveryThreshold
     ) {
