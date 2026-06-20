@@ -989,6 +989,22 @@ th { font-weight: 600; color: var(--text-muted); font-size: 13px; }
   font-weight: 800;
 }
 
+.action-time {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 26px;
+  max-width: 100%;
+  padding: 0 10px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  color: var(--text-muted);
+  background: var(--surface);
+  font-size: 12px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
 .action-risk.low {
   background: var(--ok-bg);
   color: var(--ok);

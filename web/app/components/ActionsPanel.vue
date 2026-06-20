@@ -2,6 +2,7 @@
 import {
   CheckCircle2,
   CircleOff,
+  Clock3,
   Play,
   RefreshCw,
   ShieldAlert,
@@ -13,6 +14,7 @@ const props = defineProps({
   actions: { type: Array, required: true },
   loading: { type: Boolean, default: false },
   executingActionIds: { type: Array, default: () => [] },
+  formatDate: { type: Function, required: true },
   t: { type: Function, required: true },
 })
 
@@ -37,6 +39,27 @@ function statusClass(status) {
 
 function isExecuting(actionId) {
   return props.executingActionIds.includes(actionId)
+}
+
+function actionTime(action) {
+  if (action.status === 'executed' && action.executedAt) {
+    return {
+      label: props.t('actions.time.executedAt'),
+      value: props.formatDate(action.executedAt),
+    }
+  }
+
+  if (action.status === 'pending_confirmation' || action.status === 'queued') {
+    return {
+      label: props.t('actions.time.createdAt'),
+      value: props.formatDate(action.createdAt),
+    }
+  }
+
+  return {
+    label: props.t('actions.time.updatedAt'),
+    value: props.formatDate(action.updatedAt || action.createdAt),
+  }
 }
 
 function actionTarget(action) {
@@ -147,6 +170,10 @@ function createChannelKeyState(action) {
                   <span class="action-risk" :class="action.risk">
                     <ShieldAlert :size="14" />
                     {{ t(`actions.risk.${action.risk}`) }}
+                  </span>
+                  <span class="action-time">
+                    <Clock3 :size="14" />
+                    {{ actionTime(action).label }} {{ actionTime(action).value }}
                   </span>
                 </div>
               </div>

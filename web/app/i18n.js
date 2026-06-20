@@ -163,6 +163,11 @@ const dictionaries = {
         medium: '中风险',
         high: '高风险',
       },
+      time: {
+        createdAt: '创建',
+        updatedAt: '更新',
+        executedAt: '执行',
+      },
       status: {
         queued: '待执行',
         pending_confirmation: '待确认',
@@ -525,6 +530,11 @@ const dictionaries = {
         low: 'Low risk',
         medium: 'Medium risk',
         high: 'High risk',
+      },
+      time: {
+        createdAt: 'Created',
+        updatedAt: 'Updated',
+        executedAt: 'Executed',
       },
       status: {
         queued: 'Queued',

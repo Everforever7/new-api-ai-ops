@@ -855,6 +855,7 @@ onBeforeUnmount(() => {
           :actions="actions"
           :loading="actionsLoading"
           :executingActionIds="executingActionIds"
+          :formatDate="formatDate"
           :t="t"
           @executeAction="executeAction"
           @rejectAction="rejectAction"
