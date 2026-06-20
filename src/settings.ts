@@ -68,7 +68,7 @@ export type OpsSettings = {
     concurrency: number
     failureThreshold: number
     recoveryThreshold: number
-    retentionDays: number
+    historyLimit: number
   }
   storage: {
     maxReports: number
@@ -162,7 +162,7 @@ const DEFAULT_SETTINGS: OpsSettings = {
     concurrency: 2,
     failureThreshold: 3,
     recoveryThreshold: 1,
-    retentionDays: 30,
+    historyLimit: 3,
   },
   storage: {
     maxReports: 500,
@@ -542,12 +542,12 @@ export function normalizeOpsSettings(
         1,
         100
       ),
-      retentionDays: readNumber(
+      historyLimit: readNumber(
         activeTesting,
-        'retentionDays',
-        defaults.activeTesting.retentionDays,
+        'historyLimit',
+        defaults.activeTesting.historyLimit,
         1,
-        3650
+        1000
       ),
     },
     storage: {

@@ -225,6 +225,14 @@ function parseHistoryLine(line: string) {
   }
 }
 
+function getHistoryTimestamp(run: ChannelTestRun) {
+  const endedAt = Date.parse(run.endedAt)
+  if (Number.isFinite(endedAt)) return endedAt
+  const startedAt = Date.parse(run.startedAt)
+  if (Number.isFinite(startedAt)) return startedAt
+  return 0
+}
+
 export async function getChannelTestHistory(options: {
   channelId?: number
   limit?: number
@@ -251,25 +259,52 @@ export async function getChannelTestHistory(options: {
   }
 }
 
-async function pruneHistory(retentionDays: number) {
-  const cutoff = Date.now() - Math.max(1, retentionDays) * 24 * 60 * 60 * 1000
+async function pruneHistory(historyLimit: number) {
+  const limit = Math.max(1, Math.floor(historyLimit))
   try {
     const raw = await readFile(TEST_HISTORY_PATH, 'utf8')
-    const lines = raw
+    const records = raw
       .trim()
       .split('\n')
       .filter(Boolean)
-      .filter((line) => {
-        const run = parseHistoryLine(line)
-        if (!run) return false
-        return new Date(run.endedAt).getTime() >= cutoff
-      })
+      .map((line, index) => ({
+        index,
+        line,
+        run: parseHistoryLine(line),
+      }))
+      .filter(
+        (
+          item
+        ): item is { index: number; line: string; run: ChannelTestRun } =>
+          Boolean(item.run)
+      )
+
+    const countsByChannel = new Map<number, number>()
+    const keptIndexes = new Set<number>()
+    for (const record of [...records].sort(
+      (a, b) =>
+        getHistoryTimestamp(b.run) - getHistoryTimestamp(a.run) ||
+        b.index - a.index
+    )) {
+      const count = countsByChannel.get(record.run.channelId) || 0
+      if (count >= limit) continue
+      countsByChannel.set(record.run.channelId, count + 1)
+      keptIndexes.add(record.index)
+    }
+
+    const lines = records
+      .filter((record) => keptIndexes.has(record.index))
+      .sort((a, b) => a.index - b.index)
+      .map((record) => record.line)
+
     await writeFile(
       TEST_HISTORY_PATH,
       lines.length ? `${lines.join('\n')}\n` : ''
     )
   } catch (error) {
-    if ((error as { code?: string }).code !== 'ENOENT') throw error
+    if ((error as { code?: string }).code !== 'ENOENT') {
+      throw error
+    }
   }
 }
 
@@ -509,7 +544,7 @@ export async function runChannelTests(
   )
 
   await appendTestRuns(runs)
-  await pruneHistory(settings.activeTesting.retentionDays)
+  await pruneHistory(settings.activeTesting.historyLimit)
   const memories = await updateMemoriesFromRuns(runs, settings)
 
   return {

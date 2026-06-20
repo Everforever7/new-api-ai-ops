@@ -321,6 +321,27 @@ function confirmationKey(action: string): keyof OpsSettings['aiExecution']['conf
   return undefined
 }
 
+function actionLabel(action: string) {
+  if (action === 'test_channel') return '测试渠道'
+  if (action === 'notify_low_balance') return '低余额通知'
+  if (action === 'create_channel') return '创建渠道'
+  if (action === 'update_channel') return '修改渠道'
+  if (action === 'disable_channel') return '禁用渠道'
+  if (action === 'delete_channel') return '删除渠道'
+  return action
+}
+
+function permissionLabel(
+  permission: keyof OpsSettings['aiExecution']['permissions']
+) {
+  if (permission === 'testChannel') return '测试渠道'
+  if (permission === 'createChannel') return '创建渠道'
+  if (permission === 'updateChannel') return '修改渠道'
+  if (permission === 'disableChannel') return '禁用渠道'
+  if (permission === 'deleteChannel') return '删除渠道'
+  return permission
+}
+
 function mutatesChannel(action: string) {
   return Boolean(permissionKey(action))
 }
@@ -379,21 +400,21 @@ function isProtectedChannel(
 ) {
   const rules = settings.aiExecution.protectedChannels
   if (action.channelId !== undefined && rules.ids.includes(action.channelId)) {
-    return 'channel is protected'
+    return '渠道已被 AI 保护'
   }
   if (!channel) return undefined
-  if (rules.types.includes(channel.type)) return 'channel type is protected'
+  if (rules.types.includes(channel.type)) return '渠道类型已被 AI 保护'
   if (protectedByDelimitedText(channel.group, rules.groups)) {
-    return 'channel group is protected'
+    return '渠道分组已被 AI 保护'
   }
   if (protectedByDelimitedText(channel.tag, rules.tags)) {
-    return 'channel tag is protected'
+    return '渠道标签已被 AI 保护'
   }
   if (protectedByText(channel.name, rules.nameIncludes, 'includes')) {
-    return 'channel name is protected'
+    return '渠道名称命中 AI 保护规则'
   }
   if (protectedByText(channel.models, rules.modelIncludes, 'includes')) {
-    return 'channel models are protected'
+    return '渠道模型命中 AI 保护规则'
   }
   return undefined
 }
@@ -420,18 +441,18 @@ function createPayloadProtectionReason(
 
 function payloadRequirementReason(action: OpsAction) {
   if (action.action === 'create_channel') {
-    if (!action.payload) return 'create_channel requires payload'
+    if (!action.payload) return '创建渠道需要 payload'
 
     const payload = normalizeCreatePayload(action.payload)
     const channel = isRecord(payload.channel) ? payload.channel : {}
-    if (!Object.keys(channel).length) return 'create_channel payload is empty'
-    if (!normalizeText(channel.key)) return 'create_channel requires channel key'
+    if (!Object.keys(channel).length) return '创建渠道 payload 为空'
+    if (!normalizeText(channel.key)) return '创建渠道需要渠道密钥'
   }
 
   if (action.action === 'update_channel') {
-    if (!action.payload) return 'update_channel requires payload'
+    if (!action.payload) return '修改渠道需要 payload'
     if (!Object.keys(sanitizeUpdatePayload(action.payload)).length) {
-      return 'update_channel payload has no allowed fields'
+      return '修改渠道 payload 没有可更新字段'
     }
   }
 
@@ -529,14 +550,14 @@ async function evaluateAction(
   if (!settings.aiExecution.enabled) {
     return updateAction(action, {
       status: 'blocked',
-      statusReason: 'AI execution is disabled',
+      statusReason: 'AI 执行总开关已关闭',
     })
   }
 
   if (!KNOWN_ACTIONS.has(action.action)) {
     return updateAction(action, {
       status: 'blocked',
-      statusReason: `unsupported action: ${action.rawAction || action.action}`,
+      statusReason: `不支持的动作：${action.rawAction || action.action}`,
     })
   }
 
@@ -544,7 +565,7 @@ async function evaluateAction(
   if (permission && !settings.aiExecution.permissions[permission]) {
     return updateAction(action, {
       status: 'blocked',
-      statusReason: `${permission} permission is disabled`,
+      statusReason: `${permissionLabel(permission)}权限已关闭`,
     })
   }
 
@@ -556,7 +577,7 @@ async function evaluateAction(
   if (strategy === 'never') {
     return updateAction(action, {
       status: 'blocked',
-      statusReason: `${action.action} is never allowed`,
+      statusReason: `${actionLabel(action.action)}被设置为永不允许`,
     })
   }
 
@@ -566,7 +587,7 @@ async function evaluateAction(
   ) {
     return updateAction(action, {
       status: 'blocked',
-      statusReason: `${action.action} requires channel identifier`,
+      statusReason: `${actionLabel(action.action)}需要渠道 ID`,
     })
   }
 
@@ -591,7 +612,7 @@ async function evaluateAction(
   if (requiresExistingChannel(actionWithChannel.action) && !channel) {
     return updateAction(action, {
       status: 'blocked',
-      statusReason: 'channel could not be verified',
+      statusReason: '无法验证渠道是否存在',
     })
   }
 
@@ -609,7 +630,7 @@ async function evaluateAction(
   if (await coolingDown(actionWithChannel, settings)) {
     return updateAction(actionWithChannel, {
       status: 'blocked',
-      statusReason: 'channel action is cooling down',
+      statusReason: '渠道动作仍在冷却时间内',
     })
   }
 
@@ -617,7 +638,7 @@ async function evaluateAction(
     return updateAction(actionWithChannel, {
       status: 'pending_confirmation',
       requiresConfirm: true,
-      statusReason: 'sample size below safety threshold',
+      statusReason: '样本数量低于安全阈值，需人工确认',
     })
   }
 
@@ -625,13 +646,13 @@ async function evaluateAction(
     return updateAction(actionWithChannel, {
       status: 'pending_confirmation',
       requiresConfirm: true,
-      statusReason: 'waiting for manual confirmation',
+      statusReason: '等待人工确认',
     })
   }
 
   return updateAction(actionWithChannel, {
     status: 'queued',
-    statusReason: 'ready to execute',
+    statusReason: '已准备执行',
   })
 }
 
@@ -644,7 +665,7 @@ async function executeWithClient(
   }
 
   if (action.action === 'test_channel') {
-    if (!action.channelId) throw new Error('test_channel requires channel identifier')
+    if (!action.channelId) throw new Error('测试渠道需要渠道 ID')
     const model =
       typeof action.payload?.model === 'string'
         ? action.payload.model
@@ -654,30 +675,30 @@ async function executeWithClient(
 
   if (action.action === 'create_channel') {
     if (!action.payload) {
-      throw new Error('create_channel requires payload')
+      throw new Error('创建渠道需要 payload')
     }
     return client.createChannel(normalizeCreatePayload(action.payload))
   }
 
   if (action.action === 'update_channel') {
-    if (!action.channelId) throw new Error('update_channel requires channel identifier')
-    if (!action.payload) throw new Error('update_channel requires payload')
+    if (!action.channelId) throw new Error('修改渠道需要渠道 ID')
+    if (!action.payload) throw new Error('修改渠道需要 payload')
     return client.updateChannel(action.channelId, sanitizeUpdatePayload(action.payload))
   }
 
   if (action.action === 'disable_channel') {
-    if (!action.channelId) throw new Error('disable_channel requires channel identifier')
+    if (!action.channelId) throw new Error('禁用渠道需要渠道 ID')
     return client.updateChannel(action.channelId, {
       status: CHANNEL_STATUS_AUTO_DISABLED,
     })
   }
 
   if (action.action === 'delete_channel') {
-    if (!action.channelId) throw new Error('delete_channel requires channel identifier')
+    if (!action.channelId) throw new Error('删除渠道需要渠道 ID')
     return client.deleteChannel(action.channelId)
   }
 
-  throw new Error(`unsupported action: ${action.action}`)
+  throw new Error(`不支持的动作：${action.action}`)
 }
 
 function normalizeCreatePayload(payload: Record<string, unknown>) {
@@ -795,7 +816,7 @@ export async function buildActionQueue(
       results.push(updateAction(action, {
         status: 'pending_confirmation',
         requiresConfirm: true,
-        statusReason: 'max actions per run reached',
+        statusReason: '已达到单次最大动作数量，需人工确认',
       }))
       continue
     }
@@ -828,7 +849,7 @@ export async function buildAssistantActionDrafts(
     drafts.push(updateAction(checked, {
       status: 'pending_confirmation',
       requiresConfirm: true,
-      statusReason: 'waiting for manual confirmation',
+      statusReason: '等待人工确认',
     }))
   }
 
@@ -856,7 +877,7 @@ export async function buildActiveTestActionDrafts(
         channel_name: memory.channelName,
         risk: 'medium',
         requires_confirm: true,
-        reason: `active testing observed ${memory.testSummary.consecutiveFailures} consecutive failures${memory.testSummary.lastError ? `: ${memory.testSummary.lastError}` : ''}`,
+        reason: `主动测试观察到连续 ${memory.testSummary.consecutiveFailures} 次失败${memory.testSummary.lastError ? `：${memory.testSummary.lastError}` : ''}`,
       })
       continue
     }
@@ -874,7 +895,7 @@ export async function buildActiveTestActionDrafts(
         channel_name: memory.channelName,
         risk: 'medium',
         requires_confirm: true,
-        reason: `active testing observed ${memory.testSummary.consecutiveSuccesses || 0} consecutive successful checks while channel status is ${memory.channelStatus}`,
+        reason: `主动测试观察到连续 ${memory.testSummary.consecutiveSuccesses || 0} 次成功，当前渠道状态为 ${memory.channelStatus}`,
         payload: { status: CHANNEL_STATUS_ENABLED },
       })
     }
@@ -898,8 +919,8 @@ export async function buildActiveTestActionDrafts(
       requiresConfirm: true,
       statusReason:
         checked.action === 'update_channel'
-          ? 'active testing observed disabled channel recovery'
-          : 'active testing reached failure threshold',
+          ? '主动测试观察到非启用渠道已恢复'
+          : '主动测试达到连续失败阈值',
     }))
   }
 
@@ -936,7 +957,7 @@ export async function confirmAndExecuteAction(
 ) {
   if (action.status !== 'pending_confirmation' && action.status !== 'queued') {
     return updateAction(action, {
-      statusReason: `cannot execute action in ${action.status} status`,
+      statusReason: `当前状态为 ${action.status}，不能执行`,
     })
   }
   const checked = await evaluateManualAction(
@@ -956,14 +977,14 @@ async function evaluateManualAction(
   if (!settings.aiExecution.enabled) {
     return updateAction(action, {
       status: 'blocked',
-      statusReason: 'AI execution is disabled',
+      statusReason: 'AI 执行总开关已关闭',
     })
   }
 
   if (!KNOWN_ACTIONS.has(action.action)) {
     return updateAction(action, {
       status: 'blocked',
-      statusReason: `unsupported action: ${action.rawAction || action.action}`,
+      statusReason: `不支持的动作：${action.rawAction || action.action}`,
     })
   }
 
@@ -971,7 +992,7 @@ async function evaluateManualAction(
   if (permission && !settings.aiExecution.permissions[permission]) {
     return updateAction(action, {
       status: 'blocked',
-      statusReason: `${permission} permission is disabled`,
+      statusReason: `${permissionLabel(permission)}权限已关闭`,
     })
   }
 
@@ -979,7 +1000,7 @@ async function evaluateManualAction(
   if (confirmation && settings.aiExecution.confirmation[confirmation] === 'never') {
     return updateAction(action, {
       status: 'blocked',
-      statusReason: `${action.action} is never allowed`,
+      statusReason: `${actionLabel(action.action)}被设置为永不允许`,
     })
   }
 
@@ -989,7 +1010,7 @@ async function evaluateManualAction(
   ) {
     return updateAction(action, {
       status: 'blocked',
-      statusReason: `${action.action} requires channel identifier`,
+      statusReason: `${actionLabel(action.action)}需要渠道 ID`,
     })
   }
 
@@ -1006,7 +1027,7 @@ async function evaluateManualAction(
   if (requiresExistingChannel(actionWithChannel.action) && !channel) {
     return updateAction(action, {
       status: 'blocked',
-      statusReason: 'channel could not be verified',
+      statusReason: '无法验证渠道是否存在',
     })
   }
 
@@ -1032,7 +1053,7 @@ async function evaluateManualAction(
   if (await coolingDown(actionWithChannel, settings)) {
     return updateAction(actionWithChannel, {
       status: 'blocked',
-      statusReason: 'channel action is cooling down',
+      statusReason: '渠道动作仍在冷却时间内',
     })
   }
 
@@ -1042,7 +1063,7 @@ async function evaluateManualAction(
 export async function rejectAction(action: OpsAction) {
   const rejected = updateAction(action, {
     status: 'rejected',
-    statusReason: 'rejected by operator',
+    statusReason: '已由操作员拒绝',
   })
   await appendAudit(rejected)
   return rejected

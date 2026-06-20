@@ -632,6 +632,16 @@ function logout() {
                   />
                   <small>{{ t('settings.context.maxLogsHint') }}</small>
                 </label>
+                <label class="settings-field">
+                  <span>{{ t('settings.context.testHistoryLimit') }}</span>
+                  <input
+                    type="number"
+                    min="1"
+                    :value="settingValue('activeTesting.historyLimit')"
+                    @input="update('activeTesting.historyLimit', Number($event.target.value))"
+                  />
+                  <small>{{ t('settings.context.testHistoryLimitHint') }}</small>
+                </label>
               </div>
             </div>
           </div>
@@ -720,15 +730,6 @@ function logout() {
                     min="1"
                     :value="settingValue('activeTesting.recoveryThreshold')"
                     @input="update('activeTesting.recoveryThreshold', Number($event.target.value))"
-                  />
-                </label>
-                <label class="settings-field">
-                  <span>{{ t('settings.activeTesting.retentionDays') }}</span>
-                  <input
-                    type="number"
-                    min="1"
-                    :value="settingValue('activeTesting.retentionDays')"
-                    @input="update('activeTesting.retentionDays', Number($event.target.value))"
                   />
                 </label>
               </div>

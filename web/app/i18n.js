@@ -246,7 +246,6 @@ const dictionaries = {
         concurrency: '并发数',
         failureThreshold: '连续失败禁用阈值',
         recoveryThreshold: '连续成功启用阈值',
-        retentionDays: '历史保留天数',
       },
       report: {
         title: '巡检报告',
@@ -329,6 +328,8 @@ const dictionaries = {
         maxChannelsHint: '渠道很多时只发送前 N 个，避免上下文过长。',
         maxLogs: '最大日志数',
         maxLogsHint: '从近期调用日志中截取前 N 条，并做敏感信息脱敏。',
+        testHistoryLimit: '测试历史保留次数',
+        testHistoryLimitHint: '每个渠道只保留最近 N 次主动测试记录。',
         parts: {
           channelSummary: '渠道汇总',
           channelDetails: '渠道列表',
@@ -608,7 +609,6 @@ const dictionaries = {
         concurrency: 'Concurrency',
         failureThreshold: 'Disable after failures',
         recoveryThreshold: 'Enable after successes',
-        retentionDays: 'History retention days',
       },
       report: {
         title: 'Reports',
@@ -691,6 +691,8 @@ const dictionaries = {
         maxChannelsHint: 'When there are many channels, only the first N are sent to keep context bounded.',
         maxLogs: 'Max logs',
         maxLogsHint: 'Takes the first N recent usage logs and redacts sensitive values.',
+        testHistoryLimit: 'Test history entries',
+        testHistoryLimitHint: 'Keeps only the latest N active test runs per channel.',
         parts: {
           channelSummary: 'Channel summary',
           channelDetails: 'Channel list',
