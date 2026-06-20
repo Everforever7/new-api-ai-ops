@@ -67,6 +67,7 @@ export type OpsSettings = {
     intervalMinutes: number
     concurrency: number
     failureThreshold: number
+    recoveryThreshold: number
     retentionDays: number
   }
   storage: {
@@ -159,6 +160,7 @@ const DEFAULT_SETTINGS: OpsSettings = {
     intervalMinutes: 30,
     concurrency: 2,
     failureThreshold: 3,
+    recoveryThreshold: 1,
     retentionDays: 30,
   },
   storage: {
@@ -528,6 +530,13 @@ export function normalizeOpsSettings(
         activeTesting,
         'failureThreshold',
         defaults.activeTesting.failureThreshold,
+        1,
+        100
+      ),
+      recoveryThreshold: readNumber(
+        activeTesting,
+        'recoveryThreshold',
+        defaults.activeTesting.recoveryThreshold,
         1,
         100
       ),

@@ -296,6 +296,7 @@ function emptyTestSummary(): ChannelMemory['testSummary'] {
     failed: 0,
     successRate: 0,
     consecutiveFailures: 0,
+    consecutiveSuccesses: 0,
   }
 }
 
@@ -339,6 +340,10 @@ function updateMemoryFromRun(
     run.status === 'failed'
       ? current.testSummary.consecutiveFailures + 1
       : 0
+  const consecutiveSuccesses =
+    run.status === 'success'
+      ? (current.testSummary.consecutiveSuccesses || 0) + 1
+      : 0
 
   return {
     ...current,
@@ -352,6 +357,7 @@ function updateMemoryFromRun(
       failed,
       successRate: total ? success / total : 0,
       consecutiveFailures,
+      consecutiveSuccesses,
       lastStatus: run.status,
       lastLatencyMs: run.latencyMs,
       lastError: run.error,
@@ -372,6 +378,7 @@ function memoryToPromptItem(memory: ChannelMemory): ChannelMemoryPromptItem {
     protected: memory.protected,
     successRate: memory.testSummary.successRate,
     consecutiveFailures: memory.testSummary.consecutiveFailures,
+    consecutiveSuccesses: memory.testSummary.consecutiveSuccesses,
     lastStatus: memory.testSummary.lastStatus,
     lastLatencyMs: memory.testSummary.lastLatencyMs,
     lastError: memory.testSummary.lastError,

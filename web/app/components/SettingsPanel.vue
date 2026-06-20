@@ -663,6 +663,15 @@ function logout() {
                   />
                 </label>
                 <label class="settings-field">
+                  <span>{{ t('settings.activeTesting.recoveryThreshold') }}</span>
+                  <input
+                    type="number"
+                    min="1"
+                    :value="settingValue('activeTesting.recoveryThreshold')"
+                    @input="update('activeTesting.recoveryThreshold', Number($event.target.value))"
+                  />
+                </label>
+                <label class="settings-field">
                   <span>{{ t('settings.activeTesting.retentionDays') }}</span>
                   <input
                     type="number"
@@ -698,26 +707,14 @@ function logout() {
                 </label>
                 <label class="settings-field">
                   <span>{{ t('settings.llm.model') }}</span>
-                  <div class="settings-model-row">
-                    <CustomSelect
-                      searchable
-                      allowCustom
-                      :modelValue="settings.llm.model"
-                      :options="llmModelOptions"
-                      :placeholder="t('settings.llm.modelPlaceholder')"
-                      @update:modelValue="update('llm.model', $event)"
-                    />
-                    <button
-                      class="bento-btn icon-btn"
-                      type="button"
-                      :disabled="llmModelsLoading"
-                      :aria-label="t('settings.llm.fetchModels')"
-                      :title="t('settings.llm.fetchModels')"
-                      @click="emit('fetchLlmModels')"
-                    >
-                      <RefreshCw :size="18" />
-                    </button>
-                  </div>
+                  <CustomSelect
+                    searchable
+                    allowCustom
+                    :modelValue="settings.llm.model"
+                    :options="llmModelOptions"
+                    :placeholder="t('settings.llm.modelPlaceholder')"
+                    @update:modelValue="update('llm.model', $event)"
+                  />
                   <small v-if="llmModelsLoading">
                     {{ t('settings.llm.fetchingModels') }}
                   </small>

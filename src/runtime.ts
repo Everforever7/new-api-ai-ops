@@ -241,7 +241,8 @@ export class OpsRuntime {
       const drafts = await buildActiveTestActionDrafts(
         this.config,
         result.memories,
-        settings.activeTesting.failureThreshold
+        settings.activeTesting.failureThreshold,
+        settings.activeTesting.recoveryThreshold
       )
       const nextDrafts = drafts.filter((draft) => !this.hasOpenActionLike(draft))
       this.actions = [...nextDrafts, ...this.actions]

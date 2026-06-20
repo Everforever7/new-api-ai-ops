@@ -107,6 +107,7 @@ export type ChannelMemory = {
     failed: number
     successRate: number
     consecutiveFailures: number
+    consecutiveSuccesses?: number
     lastStatus?: ChannelTestRun['status']
     lastLatencyMs?: number
     lastError?: string
@@ -125,6 +126,7 @@ export type ChannelMemoryPromptItem = {
   protected: boolean
   successRate: number
   consecutiveFailures: number
+  consecutiveSuccesses?: number
   lastStatus?: ChannelTestRun['status']
   lastLatencyMs?: number
   lastError?: string

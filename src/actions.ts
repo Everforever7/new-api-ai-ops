@@ -838,7 +838,8 @@ export async function buildAssistantActionDrafts(
 export async function buildActiveTestActionDrafts(
   config: AppConfig,
   memories: ChannelMemory[],
-  failureThreshold: number
+  failureThreshold: number,
+  recoveryThreshold: number
 ) {
   const rawActions: RawAction[] = []
 
@@ -863,7 +864,8 @@ export async function buildActiveTestActionDrafts(
     if (
       memory.channelStatus !== undefined &&
       memory.channelStatus !== CHANNEL_STATUS_ENABLED &&
-      memory.testSummary.lastStatus === 'success'
+      memory.testSummary.lastStatus === 'success' &&
+      (memory.testSummary.consecutiveSuccesses || 0) >= recoveryThreshold
     ) {
       rawActions.push({
         action: 'update_channel',
@@ -872,7 +874,7 @@ export async function buildActiveTestActionDrafts(
         channel_name: memory.channelName,
         risk: 'medium',
         requires_confirm: true,
-        reason: `active testing observed a successful check while channel status is ${memory.channelStatus}`,
+        reason: `active testing observed ${memory.testSummary.consecutiveSuccesses || 0} consecutive successful checks while channel status is ${memory.channelStatus}`,
         payload: { status: CHANNEL_STATUS_ENABLED },
       })
     }

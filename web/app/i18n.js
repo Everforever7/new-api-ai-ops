@@ -244,7 +244,8 @@ const dictionaries = {
         policyTitle: '测试策略',
         intervalMinutes: '测试间隔分钟',
         concurrency: '并发数',
-        failureThreshold: '连续失败阈值',
+        failureThreshold: '连续失败禁用阈值',
+        recoveryThreshold: '连续成功启用阈值',
         retentionDays: '历史保留天数',
       },
       report: {
@@ -596,7 +597,8 @@ const dictionaries = {
         policyTitle: 'Testing policy',
         intervalMinutes: 'Interval minutes',
         concurrency: 'Concurrency',
-        failureThreshold: 'Failure threshold',
+        failureThreshold: 'Disable after failures',
+        recoveryThreshold: 'Enable after successes',
         retentionDays: 'History retention days',
       },
       report: {
