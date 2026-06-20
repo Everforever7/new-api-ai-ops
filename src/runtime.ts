@@ -13,6 +13,7 @@ import {
   buildAssistantActionDrafts,
   buildActionQueue,
   confirmAndExecuteAction,
+  isOpenAction,
   rejectAction,
   sanitizeActionForClient,
   type OpsAction,
@@ -69,7 +70,12 @@ function loadPersistedActions() {
   try {
     const raw = readFileSync(ACTION_QUEUE_PATH, 'utf8')
     const parsed = JSON.parse(raw) as unknown
-    return Array.isArray(parsed) ? parsed.filter(isActionLike).slice(0, MAX_PERSISTED_ACTIONS) : []
+    return Array.isArray(parsed)
+      ? parsed
+          .filter(isActionLike)
+          .filter(isOpenAction)
+          .slice(0, MAX_PERSISTED_ACTIONS)
+      : []
   } catch (error) {
     if ((error as { code?: string }).code === 'ENOENT') return []
     logger.warn('failed to load persisted action queue', error)
@@ -110,9 +116,11 @@ export class OpsRuntime {
 
   private async persistActions() {
     mkdirSync(dirname(ACTION_QUEUE_PATH), { recursive: true })
+    const openActions = this.actions.filter(isOpenAction)
+    this.actions = openActions
     await writeFile(
       ACTION_QUEUE_PATH,
-      `${JSON.stringify(this.actions.slice(0, MAX_PERSISTED_ACTIONS), null, 2)}\n`
+      `${JSON.stringify(openActions.slice(0, MAX_PERSISTED_ACTIONS), null, 2)}\n`
     )
   }
 
@@ -131,7 +139,7 @@ export class OpsRuntime {
   }
 
   getActions() {
-    return this.actions.map(sanitizeActionForClient)
+    return this.actions.filter(isOpenAction).map(sanitizeActionForClient)
   }
 
   getAssistantSession() {
@@ -272,8 +280,7 @@ export class OpsRuntime {
         item.source === 'active_test' &&
         item.action === action.action &&
         item.channelId === action.channelId &&
-        item.status !== 'executed' &&
-        item.status !== 'rejected'
+        isOpenAction(item)
       )
     })
   }
@@ -457,7 +464,9 @@ export class OpsRuntime {
       logger.info('planning AI actions')
       const actions = await buildActionQueue(this.config, snapshot, report)
       const keptActions = this.actions.filter(
-        (action) => action.source === 'assistant' || action.source === 'active_test'
+        (action) =>
+          isOpenAction(action) &&
+          (action.source === 'assistant' || action.source === 'active_test')
       )
       this.actions = [...keptActions, ...actions]
       await this.persistActions()

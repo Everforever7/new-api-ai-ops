@@ -230,6 +230,14 @@ function notifyError(titleKey, error) {
   window.setTimeout(() => dismissToast(id), 6500)
 }
 
+function isOpenAction(action) {
+  return (
+    action?.status === 'queued' ||
+    action?.status === 'pending_confirmation' ||
+    action?.status === 'executing'
+  )
+}
+
 function dismissToast(id) {
   errorToasts.value = errorToasts.value.filter((toast) => toast.id !== id)
 }
@@ -419,7 +427,7 @@ async function refreshAll(options = {}) {
     if (statusResult.status === 'fulfilled') {
       status.value = statusResult.value
       if (Array.isArray(statusResult.value.lastActions)) {
-        actions.value = statusResult.value.lastActions
+        actions.value = statusResult.value.lastActions.filter(isOpenAction)
       }
     } else {
       notifyError('errors.statusLoadFailed', statusResult.reason)
@@ -476,7 +484,7 @@ async function loadActions() {
       getActions(),
       getActionAudit({ limit: 100 }),
     ])
-    actions.value = queue
+    actions.value = Array.isArray(queue) ? queue.filter(isOpenAction) : []
     actionAudit.value = audit
   } catch (error) {
     notifyError('errors.actionsLoadFailed', error)
@@ -684,9 +692,9 @@ async function executeAction(actionId) {
   executingActionIds.value = [...new Set([...executingActionIds.value, actionId])]
   try {
     const updated = await requestExecuteAction(actionId)
-    actions.value = actions.value.map((action) =>
-      action.id === updated.id ? updated : action
-    )
+    actions.value = actions.value
+      .map((action) => action.id === updated.id ? updated : action)
+      .filter(isOpenAction)
     await refreshActionAudit()
   } catch (error) {
     notifyError('errors.actionExecuteFailed', error)
@@ -699,9 +707,9 @@ async function rejectAction(actionId) {
   executingActionIds.value = [...new Set([...executingActionIds.value, actionId])]
   try {
     const updated = await requestRejectAction(actionId)
-    actions.value = actions.value.map((action) =>
-      action.id === updated.id ? updated : action
-    )
+    actions.value = actions.value
+      .map((action) => action.id === updated.id ? updated : action)
+      .filter(isOpenAction)
     await refreshActionAudit()
   } catch (error) {
     notifyError('errors.actionRejectFailed', error)

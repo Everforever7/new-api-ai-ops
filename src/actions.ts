@@ -35,6 +35,14 @@ export type OpsAction = {
   executedAt?: string
 }
 
+export function isOpenAction(action: Pick<OpsAction, 'status'>) {
+  return (
+    action.status === 'queued' ||
+    action.status === 'pending_confirmation' ||
+    action.status === 'executing'
+  )
+}
+
 export type RawAction = {
   action?: unknown
   target?: unknown
@@ -884,6 +892,7 @@ export async function buildActionQueue(
 
   for (const action of evaluated) {
     if (action.status !== 'queued') {
+      if (!isOpenAction(action)) await appendAudit(action)
       results.push(action)
       continue
     }
@@ -918,6 +927,7 @@ export async function buildAssistantActionDrafts(
     const checked = await evaluateManualAction(action, settings, client)
 
     if (checked.status === 'blocked') {
+      await appendAudit(checked)
       drafts.push(checked)
       continue
     }
@@ -988,6 +998,7 @@ export async function buildActiveTestActionDrafts(
     const checked = await evaluateManualAction(action, settings, client)
 
     if (checked.status === 'blocked') {
+      await appendAudit(checked)
       drafts.push(checked)
       continue
     }
@@ -1067,7 +1078,10 @@ export async function confirmAndExecuteAction(
     await loadOpsSettings(),
     new NewApiClient(config.newApi)
   )
-  if (checked.status === 'blocked') return checked
+  if (checked.status === 'blocked') {
+    await appendAudit(checked)
+    return checked
+  }
   return executeActionNow(config, action)
 }
 
