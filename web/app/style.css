@@ -1461,64 +1461,22 @@ th { font-weight: 600; color: var(--text-muted); font-size: 13px; }
   margin-left: auto;
 }
 
-.settings-log-list {
-  display: grid;
-  gap: 10px;
-  max-height: 560px;
-  overflow: auto;
-  padding-right: 4px;
-}
-
-.settings-log-row {
-  display: grid;
-  gap: 8px;
-  padding: 12px;
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  background: var(--surface-hover);
-}
-
-.settings-log-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-  color: var(--text-muted);
-  font-size: 12px;
-}
-
-.settings-log-row strong {
-  color: var(--text);
-  font-size: 13px;
-  line-height: 1.45;
-}
-
-.settings-log-meta {
-  max-height: 220px;
+.settings-log-terminal {
+  min-height: 420px;
+  max-height: 620px;
   overflow: auto;
   margin: 0;
-  padding: 10px;
+  padding: 14px;
+  border: 1px solid color-mix(in srgb, var(--border) 45%, #000 55%);
   border-radius: 8px;
-  background: var(--surface);
-  color: var(--text-muted);
+  background: #05070a;
+  color: #d7f7df;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.03);
   font-size: 12px;
-  line-height: 1.5;
+  line-height: 1.65;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
   white-space: pre-wrap;
   word-break: break-word;
-}
-
-.settings-log-error,
-.settings-log-empty {
-  padding: 12px;
-  border-radius: 8px;
-  background: var(--surface-hover);
-  color: var(--text-muted);
-  font-size: 13px;
-  font-weight: 700;
-}
-
-.settings-log-error {
-  color: var(--danger);
 }
 
 .toast-slide-enter-active,

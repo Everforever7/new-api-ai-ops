@@ -220,18 +220,31 @@ function formatSystemLogTime(value) {
   if (!value) return ''
   const date = new Date(value)
   if (Number.isNaN(date.getTime())) return String(value)
-  return date.toLocaleString()
+  return date.toISOString()
 }
 
-function formatSystemLogMeta(meta) {
-  if (meta === undefined || meta === null) return ''
-  if (typeof meta === 'string') return meta
+function formatSystemLogLine(entry) {
+  const timestamp = formatSystemLogTime(entry?.timestamp)
+  const level = String(entry?.level || 'info').toUpperCase().padEnd(5, ' ')
+  const message = String(entry?.message || '')
+  const prefix = `[${timestamp}] ${level} ${message}`.trim()
+  if (entry?.meta === undefined || entry?.meta === null) return prefix
+  if (typeof entry.meta === 'string') return `${prefix} ${entry.meta}`
   try {
-    return JSON.stringify(meta, null, 2)
+    return `${prefix} ${JSON.stringify(entry.meta)}`
   } catch {
-    return String(meta)
+    return `${prefix} ${String(entry.meta)}`
   }
 }
+
+const systemLogTerminalText = computed(() => {
+  if (systemLogsError.value) return systemLogsError.value
+  if (systemLogsLoading.value && !systemLogs.value.length) {
+    return props.t('settings.systemLogs.loading')
+  }
+  if (!systemLogs.value.length) return props.t('settings.systemLogs.empty')
+  return systemLogs.value.map(formatSystemLogLine).join('\n')
+})
 
 async function refreshSystemLogs() {
   systemLogsLoading.value = true
@@ -882,31 +895,7 @@ function logout() {
                 {{ t('settings.systemLogs.hint') }}
               </p>
 
-              <div v-if="systemLogsError" class="settings-log-error">
-                {{ systemLogsError }}
-              </div>
-
-              <div v-if="!systemLogsLoading && !systemLogs.length" class="settings-log-empty">
-                {{ t('settings.systemLogs.empty') }}
-              </div>
-
-              <div v-else class="settings-log-list">
-                <article
-                  v-for="entry in systemLogs"
-                  :key="entry.id"
-                  class="settings-log-row"
-                >
-                  <div class="settings-log-head">
-                    <span class="status-pill compact" :class="entry.level === 'error' ? 'danger' : entry.level === 'warn' ? 'warn' : 'ok'">
-                      <span class="status-dot"></span>
-                      {{ entry.level }}
-                    </span>
-                    <time>{{ formatSystemLogTime(entry.timestamp) }}</time>
-                  </div>
-                  <strong>{{ entry.message }}</strong>
-                  <pre v-if="formatSystemLogMeta(entry.meta)" class="settings-log-meta">{{ formatSystemLogMeta(entry.meta) }}</pre>
-                </article>
-              </div>
+              <pre class="settings-log-terminal">{{ systemLogTerminalText }}</pre>
             </div>
           </div>
 
