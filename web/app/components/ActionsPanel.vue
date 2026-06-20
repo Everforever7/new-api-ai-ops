@@ -44,6 +44,40 @@ function actionTarget(action) {
   if (action.target && !/^channel:\d+$/i.test(action.target)) return action.target
   return props.t('actions.noTarget')
 }
+
+function createChannelPayload(action) {
+  if (action.action !== 'create_channel') return null
+  const payload = action.payload || {}
+  const channel = payload.channel || payload
+  return channel && typeof channel === 'object'
+    ? { mode: payload.mode, channel }
+    : null
+}
+
+function createChannelFields(action) {
+  const payload = createChannelPayload(action)
+  if (!payload) return []
+  const channel = payload.channel
+  return [
+    ['name', props.t('actions.createPreview.name'), channel.name || actionTarget(action)],
+    ['type', props.t('actions.createPreview.type'), channel.type],
+    ['base_url', props.t('actions.createPreview.baseUrl'), channel.base_url],
+    ['models', props.t('actions.createPreview.models'), channel.models],
+    ['group', props.t('actions.createPreview.group'), channel.group],
+    ['priority', props.t('actions.createPreview.priority'), channel.priority],
+    ['weight', props.t('actions.createPreview.weight'), channel.weight],
+    ['auto_ban', props.t('actions.createPreview.autoBan'), channel.auto_ban],
+    ['remark', props.t('actions.createPreview.remark'), channel.remark],
+  ]
+    .filter(([, , value]) => value !== undefined && value !== null && value !== '')
+    .map(([key, label, value]) => ({ key, label, value: String(value) }))
+}
+
+function createChannelKeyState(action) {
+  const payload = createChannelPayload(action)
+  const key = payload?.channel?.key
+  return key ? props.t('actions.createPreview.keyConfigured') : props.t('actions.createPreview.keyMissing')
+}
 </script>
 
 <template>
@@ -122,7 +156,27 @@ function actionTarget(action) {
                 {{ action.statusReason }}
               </p>
 
-              <pre v-if="action.payload" class="minimal-pre action-payload">{{
+              <div
+                v-if="createChannelPayload(action)"
+                class="create-action-preview"
+              >
+                <div class="create-action-key-row">
+                  <span>{{ t('actions.createPreview.apiKey') }}</span>
+                  <strong>{{ createChannelKeyState(action) }}</strong>
+                </div>
+                <div class="create-action-grid">
+                  <div
+                    v-for="field in createChannelFields(action)"
+                    :key="field.key"
+                    class="create-action-field"
+                  >
+                    <span>{{ field.label }}</span>
+                    <strong>{{ field.value }}</strong>
+                  </div>
+                </div>
+              </div>
+
+              <pre v-else-if="action.payload" class="minimal-pre action-payload">{{
                 JSON.stringify(action.payload, null, 2)
               }}</pre>
             </div>

@@ -15,6 +15,7 @@ import {
   fetchLlmModels as requestFetchLlmModels,
   getAssistantSession,
   getChannelMemories,
+  getChannelTestHistory as requestGetChannelTestHistory,
   getChannels,
   getActions,
   getSettings,
@@ -75,6 +76,9 @@ const protectedSavingIds = ref([])
 const testingChannelIds = ref([])
 const testingAllChannels = ref(false)
 const memorySavingIds = ref([])
+const testHistoryChannel = ref(null)
+const testHistoryRuns = ref([])
+const testHistoryLoading = ref(false)
 
 const tabs = computed(() => [
   { id: 'dashboard', label: t('tabs.dashboard'), icon: LayoutDashboard },
@@ -635,6 +639,28 @@ async function saveChannelNote(payload) {
   }
 }
 
+async function openChannelTestHistory(channel) {
+  testHistoryChannel.value = channel
+  testHistoryRuns.value = []
+  testHistoryLoading.value = true
+  try {
+    testHistoryRuns.value = await requestGetChannelTestHistory({
+      channelId: channel.id,
+      limit: 50,
+    })
+  } catch (error) {
+    notifyError('errors.channelTestHistoryLoadFailed', error)
+  } finally {
+    testHistoryLoading.value = false
+  }
+}
+
+function closeChannelTestHistory() {
+  testHistoryChannel.value = null
+  testHistoryRuns.value = []
+  testHistoryLoading.value = false
+}
+
 async function executeAction(actionId) {
   executingActionIds.value = [...new Set([...executingActionIds.value, actionId])]
   try {
@@ -721,6 +747,9 @@ function resetAuthenticatedState() {
   testingChannelIds.value = []
   testingAllChannels.value = false
   memorySavingIds.value = []
+  testHistoryChannel.value = null
+  testHistoryRuns.value = []
+  testHistoryLoading.value = false
 }
 
 function handleUnauthorized() {
@@ -804,6 +833,9 @@ onBeforeUnmount(() => {
           :testingChannelIds="testingChannelIds"
           :testingAllChannels="testingAllChannels"
           :memorySavingIds="memorySavingIds"
+          :testHistoryChannel="testHistoryChannel"
+          :testHistoryRuns="testHistoryRuns"
+          :testHistoryLoading="testHistoryLoading"
           :t="t"
           :formatBalance="formatBalance"
           :formatLatency="formatLatency"
@@ -813,6 +845,8 @@ onBeforeUnmount(() => {
           @testChannel="testChannel"
           @testEnabledChannels="testEnabledChannels"
           @saveChannelNote="saveChannelNote"
+          @openTestHistory="openChannelTestHistory"
+          @closeTestHistory="closeChannelTestHistory"
         />
 
         <ActionsPanel

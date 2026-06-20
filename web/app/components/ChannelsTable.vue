@@ -3,6 +3,7 @@ import { computed, ref } from 'vue'
 import {
   Check,
   FlaskConical,
+  History,
   Play,
   Search,
   ShieldCheck,
@@ -18,6 +19,9 @@ const props = defineProps({
   testingChannelIds: { type: Array, default: () => [] },
   testingAllChannels: { type: Boolean, default: false },
   memorySavingIds: { type: Array, default: () => [] },
+  testHistoryChannel: { type: Object, default: null },
+  testHistoryRuns: { type: Array, default: () => [] },
+  testHistoryLoading: { type: Boolean, default: false },
   t: { type: Function, required: true },
   formatBalance: { type: Function, required: true },
   formatLatency: { type: Function, required: true },
@@ -30,6 +34,8 @@ const emit = defineEmits([
   'testChannel',
   'testEnabledChannels',
   'saveChannelNote',
+  'openTestHistory',
+  'closeTestHistory',
 ])
 
 const query = ref('')
@@ -135,6 +141,26 @@ function testStatusClass(channel) {
   if (summary?.lastStatus === 'success') return 'ok'
   if (summary?.lastStatus === 'failed') return 'danger'
   return 'warn'
+}
+
+function runStatusClass(run) {
+  return run.status === 'success' ? 'ok' : 'danger'
+}
+
+function runStatusText(run) {
+  return run.status === 'success'
+    ? props.t('channels.testSuccess')
+    : props.t('channels.testFailed')
+}
+
+function runLatency(run) {
+  return typeof run.latencyMs === 'number'
+    ? props.formatLatency(run.latencyMs)
+    : props.t('common.emptyValue')
+}
+
+function runError(run) {
+  return run.error || run.responseSummary || props.t('common.emptyValue')
 }
 
 function testStatusText(channel) {
@@ -297,6 +323,14 @@ function saveNote() {
                      <Play :size="14" />
                      <span>{{ isTesting(channel.id) ? t('channels.testing') : t('channels.test') }}</span>
                    </button>
+                   <button
+                     class="channel-protect-btn channel-action-btn"
+                     type="button"
+                     @click="emit('openTestHistory', channel)"
+                   >
+                     <History :size="14" />
+                     <span>{{ t('channels.history') }}</span>
+                   </button>
                  </div>
                </td>
                <td>
@@ -385,6 +419,77 @@ function saveNote() {
                 class="bento-btn primary"
                 type="button"
                 @click="saveNote"
+              >
+                <Check :size="16" />
+                <span>{{ t('common.done') }}</span>
+              </button>
+            </footer>
+          </section>
+        </div>
+      </Transition>
+    </Teleport>
+
+    <Teleport to="body">
+      <Transition name="toast-slide">
+        <div
+          v-if="testHistoryChannel"
+          class="prompt-editor-overlay"
+          role="dialog"
+          aria-modal="true"
+          :aria-label="t('channels.historyTitle', { name: channelDisplayName(testHistoryChannel) })"
+        >
+          <section class="prompt-editor-dialog channel-history-dialog">
+            <header class="prompt-editor-header">
+              <div>
+                <h3>{{ t('channels.historyTitle', { name: channelDisplayName(testHistoryChannel) }) }}</h3>
+                <p>{{ t('channels.historyHint') }}</p>
+              </div>
+              <button
+                class="bento-btn icon-btn"
+                type="button"
+                :aria-label="t('common.close')"
+                :title="t('common.close')"
+                @click="emit('closeTestHistory')"
+              >
+                <X :size="18" />
+              </button>
+            </header>
+
+            <div class="channel-history-body">
+              <div v-if="testHistoryLoading" class="actions-empty">
+                {{ t('channels.historyLoading') }}
+              </div>
+              <div v-else-if="!testHistoryRuns.length" class="actions-empty">
+                {{ t('channels.historyEmpty') }}
+              </div>
+              <div v-else class="channel-history-list">
+                <article
+                  v-for="run in testHistoryRuns"
+                  :key="run.id"
+                  class="channel-history-item"
+                >
+                  <div class="assistant-action-top">
+                    <span class="status-pill compact" :class="runStatusClass(run)">
+                      <span class="status-dot"></span>
+                      {{ runStatusText(run) }}
+                    </span>
+                    <span class="font-mono">{{ props.formatDate(run.endedAt) }}</span>
+                  </div>
+                  <div class="channel-history-meta">
+                    <span>{{ t('channels.historyModel') }}: {{ run.model || t('common.emptyValue') }}</span>
+                    <span>{{ t('channels.historyLatency') }}: {{ runLatency(run) }}</span>
+                    <span>{{ t('channels.historySource') }}: {{ t(`channels.historySources.${run.triggeredBy}`) }}</span>
+                  </div>
+                  <p>{{ runError(run) }}</p>
+                </article>
+              </div>
+            </div>
+
+            <footer class="prompt-editor-actions">
+              <button
+                class="bento-btn primary"
+                type="button"
+                @click="emit('closeTestHistory')"
               >
                 <Check :size="16" />
                 <span>{{ t('common.done') }}</span>

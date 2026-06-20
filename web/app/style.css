@@ -384,6 +384,49 @@ th { font-weight: 600; color: var(--text-muted); font-size: 13px; }
   height: min(520px, calc(100vh - 48px));
 }
 
+.channel-history-dialog {
+  height: min(680px, calc(100vh - 48px));
+}
+
+.channel-history-body {
+  min-height: 0;
+  overflow: auto;
+  padding-right: 4px;
+}
+
+.channel-history-list {
+  display: grid;
+  align-content: start;
+  gap: 12px;
+}
+
+.channel-history-item {
+  display: grid;
+  gap: 10px;
+  padding: 13px;
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  background: var(--surface-hover);
+}
+
+.channel-history-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 12px;
+  color: var(--text-muted);
+  font-size: 12px;
+  font-weight: 750;
+}
+
+.channel-history-item p {
+  margin: 0;
+  color: var(--text-muted);
+  overflow-wrap: anywhere;
+  font-size: 12px;
+  font-weight: 650;
+  line-height: 1.45;
+}
+
 /* Settings */
 .adaptive-bento {
   height: calc(100vh - 440px);
@@ -910,6 +953,60 @@ th { font-weight: 600; color: var(--text-muted); font-size: 13px; }
   max-height: 220px;
   border-radius: 16px;
   font-size: 12px;
+}
+
+.create-action-preview {
+  display: grid;
+  gap: 10px;
+  padding: 14px;
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  background: var(--surface);
+}
+
+.create-action-key-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--border);
+}
+
+.create-action-key-row span,
+.create-action-field span {
+  color: var(--text-muted);
+  font-size: 12px;
+  font-weight: 750;
+}
+
+.create-action-key-row strong {
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 850;
+}
+
+.create-action-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.create-action-field {
+  min-width: 0;
+  display: grid;
+  gap: 4px;
+  padding: 10px;
+  border-radius: 12px;
+  background: var(--surface-hover);
+}
+
+.create-action-field strong {
+  color: var(--text);
+  overflow-wrap: anywhere;
+  font-size: 13px;
+  font-weight: 800;
+  line-height: 1.4;
 }
 
 /* Assistant */
@@ -1594,6 +1691,8 @@ th { font-weight: 600; color: var(--text-muted); font-size: 13px; }
   .hero-actions { align-items: flex-start; }
   .action-card-top { flex-direction: column; }
   .action-badges { justify-content: flex-start; }
+  .create-action-grid { grid-template-columns: 1fr; }
+  .create-action-key-row { align-items: flex-start; flex-direction: column; }
   .assistant-bento .assistant-body { overflow: auto; }
   .assistant-layout { height: auto; }
   .assistant-conversation { min-height: 420px; }

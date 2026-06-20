@@ -1,3 +1,6 @@
+import { mkdirSync, readFileSync } from 'node:fs'
+import { writeFile } from 'node:fs/promises'
+import { dirname } from 'node:path'
 import type { AppConfig } from './config'
 import type { HealthSnapshot } from './types/domain'
 import { generateOpsReport } from './ai/llm'
@@ -27,6 +30,10 @@ import {
   runChannelTests as runChannelTestsNow,
   type RunChannelTestsOptions,
 } from './testing'
+
+const ACTION_QUEUE_PATH =
+  process.env.AI_OPS_ACTION_QUEUE_PATH?.trim() || 'data/action-queue.json'
+const MAX_PERSISTED_ACTIONS = 300
 
 export type AssistantStreamOptions = {
   userMessageId?: string
@@ -58,6 +65,28 @@ export type RunReportResult = {
   completedAt: string
 }
 
+function loadPersistedActions() {
+  try {
+    const raw = readFileSync(ACTION_QUEUE_PATH, 'utf8')
+    const parsed = JSON.parse(raw) as unknown
+    return Array.isArray(parsed) ? parsed.filter(isActionLike).slice(0, MAX_PERSISTED_ACTIONS) : []
+  } catch (error) {
+    if ((error as { code?: string }).code === 'ENOENT') return []
+    logger.warn('failed to load persisted action queue', error)
+    return []
+  }
+}
+
+function isActionLike(value: unknown): value is OpsAction {
+  return Boolean(
+    value &&
+      typeof value === 'object' &&
+      typeof (value as OpsAction).id === 'string' &&
+      typeof (value as OpsAction).action === 'string' &&
+      typeof (value as OpsAction).status === 'string'
+  )
+}
+
 export class OpsRuntime {
   private running = false
   private activeTestingRunning = false
@@ -65,7 +94,7 @@ export class OpsRuntime {
   private activeTestingScheduleKey = ''
   private lastResult?: RunReportResult
   private lastError?: string
-  private actions: OpsAction[] = []
+  private actions: OpsAction[] = loadPersistedActions()
   private assistantMessages: AssistantMessage[] = []
   private assistantSecrets: AssistantSecret[] = []
   private assistantLastActions: OpsAction[] = []
@@ -74,6 +103,14 @@ export class OpsRuntime {
   private readonly startedAt = new Date().toISOString()
 
   constructor(private readonly config: AppConfig) {}
+
+  private async persistActions() {
+    mkdirSync(dirname(ACTION_QUEUE_PATH), { recursive: true })
+    await writeFile(
+      ACTION_QUEUE_PATH,
+      `${JSON.stringify(this.actions.slice(0, MAX_PERSISTED_ACTIONS), null, 2)}\n`
+    )
+  }
 
   getState() {
     return {
@@ -161,6 +198,7 @@ export class OpsRuntime {
       )
       const nextDrafts = drafts.filter((draft) => !this.hasOpenActionLike(draft))
       this.actions = [...nextDrafts, ...this.actions]
+      await this.persistActions()
 
       return {
         ...result,
@@ -198,6 +236,7 @@ export class OpsRuntime {
     const drafts = await buildAssistantActionDrafts(this.config, plan.rawActions)
     this.assistantSecrets = plan.secrets
     this.actions = [...drafts, ...this.actions]
+    await this.persistActions()
     this.assistantLastActions = drafts
     this.assistantLastMemorySummary = plan.memorySummary
     this.assistantMessages = [
@@ -273,6 +312,7 @@ export class OpsRuntime {
 
     this.assistantSecrets = plan.secrets
     this.actions = [...drafts, ...this.actions]
+    await this.persistActions()
     this.assistantLastActions = drafts
     this.assistantLastMemorySummary = plan.memorySummary
     updateAssistantContent(plan.assistantMessage.content)
@@ -296,6 +336,7 @@ export class OpsRuntime {
 
     const next = await confirmAndExecuteAction(this.config, action)
     this.replaceAction(next)
+    await this.persistActions()
     return sanitizeActionForClient(next)
   }
 
@@ -307,6 +348,7 @@ export class OpsRuntime {
 
     const next = await rejectAction(action)
     this.replaceAction(next)
+    await this.persistActions()
     return sanitizeActionForClient(next)
   }
 
@@ -351,10 +393,11 @@ export class OpsRuntime {
 
       logger.info('planning AI actions')
       const actions = await buildActionQueue(this.config, snapshot, report)
-      const assistantActions = this.actions.filter(
-        (action) => action.source === 'assistant'
+      const keptActions = this.actions.filter(
+        (action) => action.source === 'assistant' || action.source === 'active_test'
       )
-      this.actions = [...assistantActions, ...actions]
+      this.actions = [...keptActions, ...actions]
+      await this.persistActions()
 
       let sentDiscord = false
       if (sendDiscord) {
