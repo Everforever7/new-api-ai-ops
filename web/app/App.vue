@@ -140,6 +140,8 @@ const timeUntilNextRunMs = ref(0)
 let countdownTimer = null
 let statusPollingTimer = null
 let statusPollingInFlight = false
+let countdownElapsedSyncKey = ''
+const STATUS_POLL_INTERVAL_MS = 5000
 
 function stopStatusPolling() {
   if (!statusPollingTimer) return
@@ -154,32 +156,40 @@ function upsertStatus(nextStatus) {
   }
 }
 
-async function pollStatusAfterCountdownElapsed() {
+async function syncStatusFromServer() {
   if (!isLoggedIn.value || statusPollingInFlight) return
 
   statusPollingInFlight = true
-  const previousLastRunAt = status.value?.lastRunAt || ''
+  const previousStatus = status.value
+  const hadPreviousStatus = Boolean(previousStatus)
+  const previousLastRunAt = previousStatus?.lastRunAt || ''
+  const previousReportPath = previousStatus?.lastReportPath || ''
+  const wasRunning = Boolean(previousStatus?.running)
   try {
     const nextStatus = await getStatus()
-    upsertStatus(nextStatus)
-    updateCountdown()
-
     const nextLastRunAt = nextStatus?.lastRunAt || ''
+    const nextReportPath = nextStatus?.lastReportPath || ''
     const runAdvanced = Boolean(
-      previousLastRunAt &&
+      hadPreviousStatus &&
       nextLastRunAt &&
       nextLastRunAt !== previousLastRunAt
     )
+    const reportChanged = Boolean(
+      hadPreviousStatus &&
+      nextReportPath &&
+      nextReportPath !== previousReportPath
+    )
+    const runCompleted = hadPreviousStatus && wasRunning && !nextStatus?.running
 
-    if (!nextStatus?.running && timeUntilNextRunMs.value > 0) {
-      stopStatusPolling()
-      if (runAdvanced) {
-        await refreshAll({ initialStatus: nextStatus })
-        await loadActions()
-      }
+    upsertStatus(nextStatus)
+    updateCountdown()
+
+    if (!nextStatus?.running && (runAdvanced || reportChanged || runCompleted)) {
+      await refreshAll({ initialStatus: nextStatus })
+      await loadActions()
     }
   } catch {
-    // Keep countdown polling quiet; manual refresh still surfaces errors.
+    // Keep background status sync quiet; manual refresh still surfaces errors.
   } finally {
     statusPollingInFlight = false
   }
@@ -187,14 +197,13 @@ async function pollStatusAfterCountdownElapsed() {
 
 function startStatusPolling() {
   if (statusPollingTimer || !isLoggedIn.value) return
-  void pollStatusAfterCountdownElapsed()
-  statusPollingTimer = setInterval(pollStatusAfterCountdownElapsed, 5000)
+  void syncStatusFromServer()
+  statusPollingTimer = setInterval(syncStatusFromServer, STATUS_POLL_INTERVAL_MS)
 }
 
 function updateCountdown() {
   if (!status.value?.lastRunAt || !status.value?.config?.reportIntervalMinutes) {
     timeUntilNextRunMs.value = 0
-    stopStatusPolling()
     return
   }
   const lastRun = new Date(status.value.lastRunAt).getTime()
@@ -204,9 +213,13 @@ function updateCountdown() {
   timeUntilNextRunMs.value = Math.max(0, nextRun - now)
 
   if (timeUntilNextRunMs.value <= 0) {
-    startStatusPolling()
-  } else if (!status.value?.running) {
-    stopStatusPolling()
+    const syncKey = status.value.lastRunAt
+    if (countdownElapsedSyncKey !== syncKey) {
+      countdownElapsedSyncKey = syncKey
+      void syncStatusFromServer()
+    }
+  } else {
+    countdownElapsedSyncKey = ''
   }
 }
 
@@ -859,7 +872,9 @@ async function checkAuth() {
 }
 
 function loadInitialData(initialStatus = null) {
-  refreshAll({ initialStatus })
+  void refreshAll({ initialStatus }).finally(() => {
+    startStatusPolling()
+  })
   loadSettings()
   loadActions()
 }
@@ -894,6 +909,7 @@ function resetAuthenticatedState() {
   testHistoryRuns.value = []
   testHistoryLoading.value = false
   timeUntilNextRunMs.value = 0
+  countdownElapsedSyncKey = ''
 }
 
 function handleUnauthorized() {
