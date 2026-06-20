@@ -25,7 +25,7 @@ import {
   X,
 } from 'lucide-vue-next'
 
-import { clearStoredAuth } from '../api.js'
+import { clearStoredAuth, getSystemLogs } from '../api.js'
 import CustomSelect from './CustomSelect.vue'
 
 const props = defineProps({
@@ -47,6 +47,9 @@ const emit = defineEmits([
 const activeSettingsTab = ref('execution')
 const promptEditorType = ref('')
 const promptEditorDraft = ref('')
+const systemLogs = ref([])
+const systemLogsLoading = ref(false)
+const systemLogsError = ref('')
 
 const permissionRows = computed(() => [
   {
@@ -165,6 +168,11 @@ const settingsTabs = computed(() => [
     label: props.t('settings.storage.title'),
   },
   {
+    id: 'systemLogs',
+    icon: Activity,
+    label: props.t('settings.systemLogs.title'),
+  },
+  {
     id: 'llm',
     icon: KeyRound,
     label: props.t('settings.llm.title'),
@@ -199,6 +207,43 @@ function settingValue(path) {
 
 function update(path, value) {
   emit('updateSetting', path, value)
+}
+
+function selectSettingsTab(tabId) {
+  activeSettingsTab.value = tabId
+  if (tabId === 'systemLogs' && !systemLogs.value.length && !systemLogsLoading.value) {
+    refreshSystemLogs()
+  }
+}
+
+function formatSystemLogTime(value) {
+  if (!value) return ''
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return String(value)
+  return date.toLocaleString()
+}
+
+function formatSystemLogMeta(meta) {
+  if (meta === undefined || meta === null) return ''
+  if (typeof meta === 'string') return meta
+  try {
+    return JSON.stringify(meta, null, 2)
+  } catch {
+    return String(meta)
+  }
+}
+
+async function refreshSystemLogs() {
+  systemLogsLoading.value = true
+  systemLogsError.value = ''
+  try {
+    const logs = await getSystemLogs({ limit: 200 })
+    systemLogs.value = Array.isArray(logs) ? logs : []
+  } catch (error) {
+    systemLogsError.value = error instanceof Error ? error.message : String(error)
+  } finally {
+    systemLogsLoading.value = false
+  }
 }
 
 function openPromptEditor(type) {
@@ -266,14 +311,7 @@ function logout() {
             {{ t('settings.savedAt', { value: savedAt }) }}
           </div>
           <div class="buttons">
-            <button
-              class="bento-btn"
-              type="button"
-              :disabled="saving"
-              @click="emit('reloadSettings')"
-            >
-              <RefreshCw :size="18" />
-            </button>
+
             <button
               class="bento-btn danger compact"
               @click="logout"
@@ -315,7 +353,7 @@ function logout() {
             type="button"
             role="tab"
             :aria-selected="activeSettingsTab === tab.id"
-            @click="activeSettingsTab = tab.id"
+            @click="selectSettingsTab(tab.id)"
           >
             <component :is="tab.icon" :size="16" />
             <span>{{ tab.label }}</span>
@@ -806,6 +844,68 @@ function logout() {
                   />
                   <small>{{ t('settings.storage.maxActionAuditEntriesHint') }}</small>
                 </label>
+                <label class="settings-field">
+                  <span>{{ t('settings.storage.maxAppLogEntries') }}</span>
+                  <input
+                    type="number"
+                    min="1"
+                    :value="settingValue('storage.maxAppLogEntries')"
+                    @input="update('storage.maxAppLogEntries', Number($event.target.value))"
+                  />
+                  <small>{{ t('settings.storage.maxAppLogEntriesHint') }}</small>
+                </label>
+              </div>
+            </div>
+          </div>
+
+          <div
+            v-else-if="activeSettingsTab === 'systemLogs'"
+            class="settings-stack"
+            role="tabpanel"
+          >
+            <div class="settings-section">
+              <div class="settings-section-title settings-log-title">
+                <Activity :size="18" />
+                <span>{{ t('settings.systemLogs.title') }}</span>
+                <button
+                  class="bento-btn compact"
+                  type="button"
+                  :disabled="systemLogsLoading"
+                  @click="refreshSystemLogs"
+                >
+                  <RefreshCw :size="16" />
+                  <span>{{ systemLogsLoading ? t('settings.systemLogs.loading') : t('settings.systemLogs.refresh') }}</span>
+                </button>
+              </div>
+
+              <p class="settings-help-text">
+                {{ t('settings.systemLogs.hint') }}
+              </p>
+
+              <div v-if="systemLogsError" class="settings-log-error">
+                {{ systemLogsError }}
+              </div>
+
+              <div v-if="!systemLogsLoading && !systemLogs.length" class="settings-log-empty">
+                {{ t('settings.systemLogs.empty') }}
+              </div>
+
+              <div v-else class="settings-log-list">
+                <article
+                  v-for="entry in systemLogs"
+                  :key="entry.id"
+                  class="settings-log-row"
+                >
+                  <div class="settings-log-head">
+                    <span class="status-pill compact" :class="entry.level === 'error' ? 'danger' : entry.level === 'warn' ? 'warn' : 'ok'">
+                      <span class="status-dot"></span>
+                      {{ entry.level }}
+                    </span>
+                    <time>{{ formatSystemLogTime(entry.timestamp) }}</time>
+                  </div>
+                  <strong>{{ entry.message }}</strong>
+                  <pre v-if="formatSystemLogMeta(entry.meta)" class="settings-log-meta">{{ formatSystemLogMeta(entry.meta) }}</pre>
+                </article>
               </div>
             </div>
           </div>

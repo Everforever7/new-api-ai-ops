@@ -236,6 +236,10 @@ export class OpsRuntime {
 
     this.activeTestingRunning = true
     try {
+      logger.info('running channel tests', {
+        triggeredBy: options.triggeredBy || 'manual',
+        channelIds: options.channelIds,
+      })
       const result = await runChannelTestsNow(this.config, options)
       const settings = await loadOpsSettings()
       const drafts = await buildActiveTestActionDrafts(
@@ -247,6 +251,11 @@ export class OpsRuntime {
       const nextDrafts = drafts.filter((draft) => !this.hasOpenActionLike(draft))
       this.actions = [...nextDrafts, ...this.actions]
       await this.persistActions()
+      logger.info('channel tests completed', {
+        runs: result.runs.length,
+        actions: nextDrafts.length,
+        failed: result.runs.filter((run) => run.status === 'failed').length,
+      })
 
       return {
         ...result,

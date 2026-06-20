@@ -73,6 +73,7 @@ export type OpsSettings = {
   storage: {
     maxReports: number
     maxActionAuditEntries: number
+    maxAppLogEntries: number
   }
 }
 
@@ -166,6 +167,7 @@ const DEFAULT_SETTINGS: OpsSettings = {
   storage: {
     maxReports: 500,
     maxActionAuditEntries: 5000,
+    maxAppLogEntries: 5000,
   },
 }
 
@@ -560,6 +562,13 @@ export function normalizeOpsSettings(
         storage,
         'maxActionAuditEntries',
         defaults.storage.maxActionAuditEntries,
+        1,
+        1_000_000
+      ),
+      maxAppLogEntries: readNumber(
+        storage,
+        'maxAppLogEntries',
+        defaults.storage.maxAppLogEntries,
         1,
         1_000_000
       ),

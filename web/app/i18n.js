@@ -261,6 +261,15 @@ const dictionaries = {
         maxReportsHint: '超过上限后删除最旧的 reports/*.md。',
         maxActionAuditEntries: '审计日志最大条数',
         maxActionAuditEntriesHint: '超过上限后保留 action-audit.jsonl 最新记录。',
+        maxAppLogEntries: '系统日志最大条数',
+        maxAppLogEntriesHint: '超过上限后保留 app-log.jsonl 最新记录。',
+      },
+      systemLogs: {
+        title: '系统日志',
+        hint: '显示后端最近写入的应用运行日志，包含调度、巡检、主动测试和异常事件。',
+        refresh: '刷新日志',
+        loading: '加载中',
+        empty: '暂无系统日志。',
       },
       llm: {
         title: 'LLM 配置',
@@ -614,6 +623,15 @@ const dictionaries = {
         maxReportsHint: 'Deletes the oldest reports/*.md after the limit.',
         maxActionAuditEntries: 'Max audit entries',
         maxActionAuditEntriesHint: 'Keeps the newest action-audit.jsonl records after the limit.',
+        maxAppLogEntries: 'Max system log entries',
+        maxAppLogEntriesHint: 'Keeps the newest app-log.jsonl records after the limit.',
+      },
+      systemLogs: {
+        title: 'System Logs',
+        hint: 'Shows recent backend application logs, including scheduler, inspection, active testing, and error events.',
+        refresh: 'Refresh logs',
+        loading: 'Loading',
+        empty: 'No system logs yet.',
       },
       llm: {
         title: 'LLM Config',

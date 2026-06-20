@@ -5,7 +5,12 @@ import type { AppConfig } from '../config'
 import type { Channel } from '../types/domain'
 import { NewApiClient } from '../newapi/client'
 import { OpsRuntime } from '../runtime'
-import { logger } from '../logger'
+import {
+  configureAppLogger,
+  listAppLogs,
+  logger,
+  pruneAppLogs,
+} from '../logger'
 import {
   loadEffectiveLlmConfig,
   loadOpsSettings,
@@ -288,13 +293,24 @@ async function handleApi(
         throw new Error('invalid settings JSON')
       })
       const saved = await savePublicOpsSettings(body, config)
+      configureAppLogger({ maxEntries: saved.storage.maxAppLogEntries })
       await Promise.all([
         pruneReports(config.report.saveDir, saved.storage.maxReports),
         pruneActionAudit(saved.storage.maxActionAuditEntries),
+        pruneAppLogs(saved.storage.maxAppLogEntries),
       ])
       await runtime.refreshReportScheduler()
       await runtime.refreshActiveTestingScheduler()
       return json(saved)
+    }
+
+    if (url.pathname === '/api/system-logs' && req.method === 'GET') {
+      const limit = Number(url.searchParams.get('limit') || '')
+      return json(
+        await listAppLogs({
+          limit: Number.isInteger(limit) && limit > 0 ? limit : undefined,
+        })
+      )
     }
 
     if (url.pathname === '/api/llm/models' && req.method === 'POST') {
@@ -453,6 +469,11 @@ async function handleApi(
 
     return jsonError('not found', 404)
   } catch (error) {
+    logger.error('api request failed', {
+      method: req.method,
+      path: url.pathname,
+      error,
+    })
     return jsonError(error instanceof Error ? error.message : String(error))
   }
 }

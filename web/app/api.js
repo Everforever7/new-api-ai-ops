@@ -309,3 +309,10 @@ export function saveChannelMemory(channelId, memory) {
 export function getReports() {
   return api('/api/reports')
 }
+
+export function getSystemLogs(options = {}) {
+  const params = new URLSearchParams()
+  if (options.limit) params.set('limit', String(options.limit))
+  const query = params.toString()
+  return api(`/api/system-logs${query ? `?${query}` : ''}`)
+}

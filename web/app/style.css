@@ -1453,6 +1453,74 @@ th { font-weight: 600; color: var(--text-muted); font-size: 13px; }
   color: var(--text);
 }
 
+.settings-log-title {
+  justify-content: space-between;
+}
+
+.settings-log-title .bento-btn {
+  margin-left: auto;
+}
+
+.settings-log-list {
+  display: grid;
+  gap: 10px;
+  max-height: 560px;
+  overflow: auto;
+  padding-right: 4px;
+}
+
+.settings-log-row {
+  display: grid;
+  gap: 8px;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface-hover);
+}
+
+.settings-log-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.settings-log-row strong {
+  color: var(--text);
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.settings-log-meta {
+  max-height: 220px;
+  overflow: auto;
+  margin: 0;
+  padding: 10px;
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--text-muted);
+  font-size: 12px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.settings-log-error,
+.settings-log-empty {
+  padding: 12px;
+  border-radius: 8px;
+  background: var(--surface-hover);
+  color: var(--text-muted);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.settings-log-error {
+  color: var(--danger);
+}
+
 .toast-slide-enter-active,
 .toast-slide-leave-active {
   transition: opacity 0.24s ease, transform 0.24s cubic-bezier(0.2, 0.8, 0.2, 1);
