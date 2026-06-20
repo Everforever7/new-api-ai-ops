@@ -16,6 +16,7 @@ const isOpen = ref(false)
 const selectRef = ref(null)
 const inputRef = ref(null)
 const inputValue = ref(String(props.modelValue ?? ''))
+const searchQuery = ref('')
 
 const normalizedOptions = computed(() =>
   props.options.map((option) => {
@@ -47,7 +48,7 @@ const displayValue = computed(() =>
 const visibleOptions = computed(() => {
   if (!props.searchable) return normalizedOptions.value
 
-  const query = inputValue.value.trim().toLowerCase()
+  const query = searchQuery.value.trim().toLowerCase()
   if (!query) return normalizedOptions.value
 
   return normalizedOptions.value.filter((option) =>
@@ -64,11 +65,14 @@ watch(
 )
 
 function toggle() {
-  isOpen.value = !isOpen.value
+  const nextOpen = !isOpen.value
+  isOpen.value = nextOpen
+  if (nextOpen) searchQuery.value = ''
   if (isOpen.value && props.searchable) focusInput()
 }
 
 function open() {
+  if (!isOpen.value) searchQuery.value = ''
   isOpen.value = true
 }
 
@@ -85,6 +89,7 @@ function updateValue(value) {
 
 function selectOption(option) {
   inputValue.value = String(option.value ?? '')
+  searchQuery.value = ''
   updateValue(option.value)
   isOpen.value = false
 }
@@ -92,6 +97,7 @@ function selectOption(option) {
 function handleInput(event) {
   const value = event.target.value
   inputValue.value = value
+  searchQuery.value = value
   isOpen.value = true
 
   if (props.allowCustom) {
@@ -102,6 +108,7 @@ function handleInput(event) {
 function handleClickOutside(event) {
   if (selectRef.value && !selectRef.value.contains(event.target)) {
     isOpen.value = false
+    searchQuery.value = ''
   }
 }
 

@@ -74,6 +74,7 @@ const assistantSending = ref(false)
 const assistantResetting = ref(false)
 const llmModels = ref([])
 const llmModelsLoading = ref(false)
+const llmModelsFetchedCount = ref(null)
 const protectedSavingIds = ref([])
 const testingChannelIds = ref([])
 const testingAllChannels = ref(false)
@@ -560,9 +561,12 @@ async function fetchLlmModels() {
   if (!settings.value?.llm) return
 
   llmModelsLoading.value = true
+  llmModelsFetchedCount.value = null
   try {
     const result = await requestFetchLlmModels(settings.value.llm)
     llmModels.value = Array.isArray(result.models) ? result.models : []
+    llmModelsFetchedCount.value =
+      typeof result.count === 'number' ? result.count : llmModels.value.length
   } catch (error) {
     notifyError('errors.llmModelsLoadFailed', error)
   } finally {
@@ -760,6 +764,7 @@ function resetAuthenticatedState() {
   assistantResetting.value = false
   llmModels.value = []
   llmModelsLoading.value = false
+  llmModelsFetchedCount.value = null
   protectedSavingIds.value = []
   testingChannelIds.value = []
   testingAllChannels.value = false
@@ -889,6 +894,7 @@ onBeforeUnmount(() => {
           :savedAt="settingsSavedAt"
           :llmModels="llmModels"
           :llmModelsLoading="llmModelsLoading"
+          :llmModelsFetchedCount="llmModelsFetchedCount"
           :t="t"
           @updateSetting="updateSetting"
           @saveSettings="saveSettings"

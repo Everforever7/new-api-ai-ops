@@ -35,6 +35,7 @@ const props = defineProps({
   savedAt: { type: String, default: '' },
   llmModels: { type: Array, default: () => [] },
   llmModelsLoading: { type: Boolean, default: false },
+  llmModelsFetchedCount: { type: Number, default: null },
   t: { type: Function, required: true },
 })
 
@@ -759,16 +760,31 @@ function logout() {
                 </label>
                 <label class="settings-field">
                   <span>{{ t('settings.llm.model') }}</span>
-                  <CustomSelect
-                    searchable
-                    allowCustom
-                    :modelValue="settings.llm.model"
-                    :options="llmModelOptions"
-                    :placeholder="t('settings.llm.modelPlaceholder')"
-                    @update:modelValue="update('llm.model', $event)"
-                  />
+                  <div class="settings-model-row">
+                    <CustomSelect
+                      searchable
+                      allowCustom
+                      :modelValue="settings.llm.model"
+                      :options="llmModelOptions"
+                      :placeholder="t('settings.llm.modelPlaceholder')"
+                      @update:modelValue="update('llm.model', $event)"
+                    />
+                    <button
+                      class="bento-btn icon-btn"
+                      type="button"
+                      :disabled="llmModelsLoading"
+                      :aria-label="t('settings.llm.fetchModels')"
+                      :title="t('settings.llm.fetchModels')"
+                      @click="emit('fetchLlmModels')"
+                    >
+                      <RefreshCw :size="18" />
+                    </button>
+                  </div>
                   <small v-if="llmModelsLoading">
                     {{ t('settings.llm.fetchingModels') }}
+                  </small>
+                  <small v-else-if="llmModelsFetchedCount !== null">
+                    {{ t('settings.llm.fetchedModels', { count: llmModelsFetchedCount }) }}
                   </small>
                 </label>
               </div>
