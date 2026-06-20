@@ -336,7 +336,7 @@ function permissionLabel(
 ) {
   if (permission === 'testChannel') return '测试渠道'
   if (permission === 'createChannel') return '创建渠道'
-  if (permission === 'updateChannel') return '修改渠道'
+  if (permission === 'updateChannel') return '开启/修改渠道'
   if (permission === 'disableChannel') return '禁用渠道'
   if (permission === 'deleteChannel') return '删除渠道'
   return permission
@@ -348,6 +348,28 @@ function mutatesChannel(action: string) {
 
 function requiresExistingChannel(action: string) {
   return ['update_channel', 'disable_channel', 'delete_channel'].includes(action)
+}
+
+function isStatusOnlyEnableAction(action: OpsAction) {
+  if (action.action !== 'update_channel' || !action.payload) return false
+  const payload = sanitizeUpdatePayload(action.payload)
+  const entries = Object.entries(payload).filter(([, value]) => value !== undefined)
+  if (entries.length !== 1) return false
+  const [key, value] = entries[0]
+  return key === 'status' && Number(value) === CHANNEL_STATUS_ENABLED
+}
+
+function isAutomaticMaintenanceAction(action: OpsAction) {
+  return action.action === 'disable_channel' || isStatusOnlyEnableAction(action)
+}
+
+function manualConfirmationReason(action: OpsAction) {
+  if (action.action === 'create_channel') return '创建渠道只允许生成草案，需人工确认'
+  if (action.action === 'delete_channel') return '删除渠道只允许生成草案，需人工确认'
+  if (action.action === 'update_channel' && !isAutomaticMaintenanceAction(action)) {
+    return '非开启渠道的修改需人工确认'
+  }
+  return undefined
 }
 
 function normalizeText(value: unknown) {
@@ -642,7 +664,20 @@ async function evaluateAction(
     })
   }
 
-  if (strategy === 'confirm' || actionWithChannel.requiresConfirm || actionWithChannel.risk !== 'low') {
+  const manualReason = manualConfirmationReason(actionWithChannel)
+  if (manualReason) {
+    return updateAction(actionWithChannel, {
+      status: 'pending_confirmation',
+      requiresConfirm: true,
+      statusReason: manualReason,
+    })
+  }
+
+  const autoMaintenance = isAutomaticMaintenanceAction(actionWithChannel)
+  if (
+    strategy === 'confirm' ||
+    (!autoMaintenance && (actionWithChannel.requiresConfirm || actionWithChannel.risk !== 'low'))
+  ) {
     return updateAction(actionWithChannel, {
       status: 'pending_confirmation',
       requiresConfirm: true,
@@ -904,6 +939,8 @@ export async function buildActiveTestActionDrafts(
   const settings = await loadOpsSettings()
   const client = new NewApiClient(config.newApi)
   const drafts: OpsAction[] = []
+  const maxActions = settings.aiExecution.safety.maxActionsPerRun
+  let executed = 0
 
   for (const [index, raw] of rawActions.entries()) {
     const action = createOpsAction(raw, index, 'active_test')
@@ -911,6 +948,30 @@ export async function buildActiveTestActionDrafts(
 
     if (checked.status === 'blocked') {
       drafts.push(checked)
+      continue
+    }
+
+    const confirmation = confirmationKey(checked.action)
+    const strategy = confirmation
+      ? settings.aiExecution.confirmation[confirmation]
+      : 'confirm'
+    if (strategy === 'auto' && isAutomaticMaintenanceAction(checked)) {
+      if (executed >= maxActions) {
+        drafts.push(updateAction(checked, {
+          status: 'pending_confirmation',
+          requiresConfirm: true,
+          statusReason: '已达到单次最大动作数量，需人工确认',
+        }))
+        continue
+      }
+
+      const result = await executeActionNow(config, updateAction(checked, {
+        status: 'queued',
+        requiresConfirm: false,
+        statusReason: '主动测试达到启停阈值，自动执行',
+      }))
+      if (result.status === 'executed') executed += 1
+      drafts.push(result)
       continue
     }
 

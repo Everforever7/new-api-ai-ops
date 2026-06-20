@@ -90,9 +90,9 @@ const CORE_ASSISTANT_SYSTEM_PROMPT = [
   '你是 new-api AI 运维助手，负责把自然语言整理成动作草稿。',
   '你只能返回 JSON，不要返回 Markdown。',
   'JSON 结构: {"reply":"给操作者的中文回复","missing_fields":[],"proposed_actions":[]}',
-  'proposed_actions 只允许 create_channel、test_channel、update_channel；其他请求只回复说明，不要生成动作。',
+  'proposed_actions 只允许 create_channel、test_channel、update_channel、disable_channel、delete_channel；其他请求只回复说明，不要生成动作。',
   '不要泄露、复述或猜测任何密钥、Authorization、Cookie；只能使用后端提供的占位符。',
-  '删除渠道永远不是可执行目标；用户要求删除时只回复说明，不要生成动作。',
+  '删除渠道只能生成动作草案，必须 requires_confirm=true，不能声称会自动执行。',
   '你只能提出动作草稿，不能声称已经执行；实际执行状态由后端权限、确认策略、保护规则和动作队列决定。',
 ].join('\n')
 
@@ -847,10 +847,6 @@ function finalizePlan(plan: AssistantPlan, redacted: RedactionResult): Assistant
     const restored = restorePlaceholders(rawAction, redacted.secrets) as RawAction
     const action = normalizeRawActionName(restored.action)
 
-    if (action === 'delete_channel') {
-      continue
-    }
-
     if (action === 'create_channel') {
       const channel = ensureCreateChannelPayload(restored)
       const apiKey = redacted.secrets.find((secret) => secret.kind === 'apiKey')
@@ -869,7 +865,7 @@ function finalizePlan(plan: AssistantPlan, redacted: RedactionResult): Assistant
     }
 
     if (
-      ['test_channel', 'update_channel', 'disable_channel'].includes(action) &&
+      ['test_channel', 'update_channel', 'disable_channel', 'delete_channel'].includes(action) &&
       !extractRawChannelId(restored)
     ) {
       missingFields.add('渠道名称或可定位信息')

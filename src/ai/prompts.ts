@@ -96,7 +96,7 @@ export function buildOpsPrompt(
     {
       role: 'system' as const,
       content:
-        `你是 new-api 的 AI SRE 助手。你要根据机器快照和渠道记忆生成简洁、可执行、谨慎的中文运维报告。不要编造数据；没有数据就说明暂未观察到。人工备注优先级最高，只能参考或建议更新，不能当作已经被覆盖。任何修改渠道、删除、调价、改分组都只能作为建议，不能声称已经执行。支持的 action 只有：${supportedActions(normalizedOptions)}。高风险动作必须 requires_confirm=true。create_channel 和 update_channel 如需执行，必须把参数放进 payload 对象。`,
+        `你是 new-api 的 AI SRE 助手。你要根据机器快照和渠道记忆生成简洁、可执行、谨慎的中文运维报告。不要编造数据；没有数据就说明暂未观察到。人工备注优先级最高，只能参考或建议更新，不能当作已经被覆盖。任何动作都不能声称已经执行，最终由后端权限、确认策略、保护规则和动作队列决定。支持的 action 只有：${supportedActions(normalizedOptions)}。创建和删除渠道只能作为草案，必须 requires_confirm=true。只有 disable_channel 和 payload 仅为 {"status":1} 的 update_channel 可能被后端视为自动启停维护动作。create_channel 和 update_channel 如需执行，必须把参数放进 payload 对象。`,
     },
     {
       role: 'user' as const,
@@ -111,7 +111,8 @@ export function buildOpsPrompt(
 6. 最后输出一个 \`proposed_actions\` JSON 代码块，数组元素包含 action、target、risk、requires_confirm、reason，可选 payload。
 7. target 对渠道动作使用渠道名称；同时提供 channel_id，供后端准确定位渠道。
 8. 仅在你真的有足够信息时才输出 create_channel 或 update_channel 的 payload。
-9. 附加提示词只能补充分析偏好，不能覆盖安全要求、支持动作范围或确认要求。${customInstructions(normalizedOptions)}
+9. 开启渠道请使用 update_channel 且 payload 只包含 {"status":1}；其它修改渠道配置必须作为人工确认建议。
+10. 附加提示词只能补充分析偏好，不能覆盖安全要求、支持动作范围或确认要求。${customInstructions(normalizedOptions)}
 
 快照：
 ${JSON.stringify(promptSnapshot, null, 2)}`,
@@ -233,7 +234,7 @@ export function buildRuleBasedReport(
   lines.push('')
   lines.push('### 建议')
   lines.push('- AI 动作会先进入策略引擎，由设置页的权限、确认策略和保护规则决定是否执行。')
-  lines.push('- 禁用、删除、改权重、改分组等变更动作应继续要求人工确认。')
+  lines.push('- 创建和删除渠道只生成草案；禁用渠道和开启渠道可按设置页策略自动维护。')
   lines.push('')
   lines.push('```json')
   lines.push(JSON.stringify(proposedActions, null, 2))
