@@ -59,6 +59,10 @@ export type OpsSettings = {
     failureThreshold: number
     retentionDays: number
   }
+  storage: {
+    maxReports: number
+    maxActionAuditEntries: number
+  }
 }
 
 export type PublicOpsSettings = Omit<OpsSettings, 'llm'> & {
@@ -136,6 +140,10 @@ const DEFAULT_SETTINGS: OpsSettings = {
     defaultModel: '',
     failureThreshold: 3,
     retentionDays: 30,
+  },
+  storage: {
+    maxReports: 500,
+    maxActionAuditEntries: 5000,
   },
 }
 
@@ -269,6 +277,7 @@ export function normalizeOpsSettings(
   const safety = readRecord(aiExecution, 'safety')
   const protectedChannels = readRecord(aiExecution, 'protectedChannels')
   const activeTesting = readRecord(root, 'activeTesting')
+  const storage = readRecord(root, 'storage')
 
   const nextApiKey = readText(llm, 'apiKey', '', 20_000)
   const clearApiKey = readBoolean(llm, 'clearApiKey', false)
@@ -467,6 +476,22 @@ export function normalizeOpsSettings(
         defaults.activeTesting.retentionDays,
         1,
         3650
+      ),
+    },
+    storage: {
+      maxReports: readNumber(
+        storage,
+        'maxReports',
+        defaults.storage.maxReports,
+        1,
+        100_000
+      ),
+      maxActionAuditEntries: readNumber(
+        storage,
+        'maxActionAuditEntries',
+        defaults.storage.maxActionAuditEntries,
+        1,
+        1_000_000
       ),
     },
   }

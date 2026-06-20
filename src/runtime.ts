@@ -6,7 +6,7 @@ import type { HealthSnapshot } from './types/domain'
 import { generateOpsReport } from './ai/llm'
 import { collectHealthSnapshot } from './newapi/health'
 import { sendDiscordReport } from './reporters/discord'
-import { saveReport } from './reporters/save'
+import { pruneReports, saveReport } from './reporters/save'
 import { logger } from './logger'
 import {
   buildActiveTestActionDrafts,
@@ -389,6 +389,12 @@ export class OpsRuntime {
       logger.info('generating AI ops report')
       const report = await generateOpsReport(this.config, snapshot)
       const reportPath = await saveReport(this.config.report.saveDir, report)
+      try {
+        const settings = await loadOpsSettings()
+        await pruneReports(this.config.report.saveDir, settings.storage.maxReports)
+      } catch (error) {
+        logger.warn('failed to prune saved reports', error)
+      }
       logger.info(`saved report: ${reportPath}`)
 
       logger.info('planning AI actions')

@@ -132,6 +132,10 @@ function weightText(channel) {
   return parts.join(' / ') || props.t('common.emptyValue')
 }
 
+function modelsText(channel) {
+  return channel.models || props.t('common.emptyValue')
+}
+
 function testSummary(channel) {
   return memoryFor(channel)?.testSummary || null
 }
@@ -262,116 +266,117 @@ function saveNote() {
         </div>
       </div>
 
-       <div class="bento-body bento-table-wrap channels-table-wrap">
-         <table class="channels-table">
-           <thead>
-             <tr>
-               <th>{{ t('channels.id') }}</th>
-               <th>{{ t('channels.name') }}</th>
-               <th>{{ t('channels.models') }}</th>
-               <th>{{ t('channels.status') }}</th>
-               <th>{{ t('channels.weighting') }}</th>
-               <th>{{ t('channels.balance') }}</th>
-               <th>{{ t('channels.latency') }}</th>
-               <th>{{ t('channels.testStatus') }}</th>
-               <th>{{ t('channels.aiProtection') }}</th>
-               <th>{{ t('channels.memory') }}</th>
-             </tr>
-           </thead>
-           <tbody>
-             <tr v-if="!channels.length">
-               <td colspan="10" class="empty">{{ t('channels.empty') }}</td>
-             </tr>
-             <tr v-else-if="!filteredChannels.length">
-               <td colspan="10" class="empty">{{ t('channels.noMatches') }}</td>
-             </tr>
-             <tr v-for="channel in filteredChannels" :key="channel.id">
-               <td class="channel-id">{{ channel.id }}</td>
-               <td>
-                 <div class="channel-main-cell">
-                   <strong>{{ channelDisplayName(channel) }}</strong>
-                   <small>{{ detailParts(channel).join(' · ') || t('common.emptyValue') }}</small>
-                 </div>
-               </td>
-               <td>
-                 <div class="channel-models-cell">
-                   {{ channel.models || t('common.emptyValue') }}
-                 </div>
-               </td>
-               <td>
-                 <span class="status-pill compact" :class="channelStatusClass(channel)">
-                   <span class="status-dot"></span>
-                   {{ formatChannelStatus(channel) }}
-                 </span>
-               </td>
-               <td class="font-mono">{{ weightText(channel) }}</td>
-               <td class="font-mono">{{ formatBalance(channel.balance) }}</td>
-               <td class="font-mono">{{ formatLatency(channel.responseTimeMs) }}</td>
-               <td>
-                 <div class="channel-test-cell">
-                   <span class="status-pill compact" :class="testStatusClass(channel)">
-                     <span class="status-dot"></span>
-                     {{ testStatusText(channel) }}
-                   </span>
-                   <small>{{ testMeta(channel) }}</small>
-                   <button
-                     class="channel-protect-btn channel-action-btn"
-                     type="button"
-                     :disabled="isTesting(channel.id) || testingAllChannels"
-                     @click="emit('testChannel', channel.id)"
-                   >
-                     <Play :size="14" />
-                     <span>{{ isTesting(channel.id) ? t('channels.testing') : t('channels.test') }}</span>
-                   </button>
-                   <button
-                     class="channel-protect-btn channel-action-btn"
-                     type="button"
-                     @click="emit('openTestHistory', channel)"
-                   >
-                     <History :size="14" />
-                     <span>{{ t('channels.history') }}</span>
-                   </button>
-                 </div>
-               </td>
-               <td>
-                 <button
-                   class="channel-protect-btn"
-                   :class="{ active: isProtected(channel.id) }"
-                   type="button"
-                   :disabled="!settings || isSaving(channel.id)"
-                   :aria-pressed="isProtected(channel.id)"
-                   @click="emit('toggleProtectedChannel', channel.id)"
-                 >
-                   <ShieldCheck :size="15" />
-                   <span>
-                     {{
-                       isSaving(channel.id)
-                         ? t('channels.savingProtection')
-                         : isProtected(channel.id)
-                           ? t('channels.protected')
-                           : t('channels.unprotected')
-                     }}
-                   </span>
-                 </button>
-               </td>
-               <td>
-                 <div class="channel-memory-cell">
-                   <p>{{ notePreview(channel) }}</p>
-                   <button
-                     class="channel-protect-btn channel-action-btn"
-                     type="button"
-                     :disabled="isMemorySaving(channel.id)"
-                     @click="openNoteEditor(channel)"
-                   >
-                     <StickyNote :size="14" />
-                     <span>{{ isMemorySaving(channel.id) ? t('channels.savingNote') : t('channels.editNote') }}</span>
-                   </button>
-                 </div>
-               </td>
-             </tr>
-           </tbody>
-         </table>
-       </div>
+      <div class="bento-body channels-list-wrap">
+        <div v-if="!channels.length" class="channels-empty">
+          {{ t('channels.empty') }}
+        </div>
+
+        <div v-else-if="!filteredChannels.length" class="channels-empty">
+          {{ t('channels.noMatches') }}
+        </div>
+
+        <div v-else class="channels-list">
+          <article
+            v-for="channel in filteredChannels"
+            :key="channel.id"
+            class="channel-row"
+          >
+            <div class="channel-row-main">
+              <div class="channel-id-chip">{{ channel.id }}</div>
+
+              <div class="channel-title-block">
+                <strong>{{ channelDisplayName(channel) }}</strong>
+                <small>{{ detailParts(channel).join(' · ') || t('common.emptyValue') }}</small>
+              </div>
+
+              <span class="status-pill compact" :class="channelStatusClass(channel)">
+                <span class="status-dot"></span>
+                {{ formatChannelStatus(channel) }}
+              </span>
+
+              <div class="channel-test-summary">
+                <span class="status-pill compact" :class="testStatusClass(channel)">
+                  <span class="status-dot"></span>
+                  {{ testStatusText(channel) }}
+                </span>
+                <small>{{ testMeta(channel) }}</small>
+              </div>
+
+              <button
+                class="channel-protect-btn"
+                :class="{ active: isProtected(channel.id) }"
+                type="button"
+                :disabled="!settings || isSaving(channel.id)"
+                :aria-pressed="isProtected(channel.id)"
+                @click="emit('toggleProtectedChannel', channel.id)"
+              >
+                <ShieldCheck :size="15" />
+                <span>
+                  {{
+                    isSaving(channel.id)
+                      ? t('channels.savingProtection')
+                      : isProtected(channel.id)
+                        ? t('channels.protected')
+                        : t('channels.unprotected')
+                  }}
+                </span>
+              </button>
+
+              <div class="channel-row-actions">
+                <button
+                  class="channel-protect-btn channel-action-btn"
+                  type="button"
+                  :disabled="isTesting(channel.id) || testingAllChannels"
+                  @click="emit('testChannel', channel.id)"
+                >
+                  <Play :size="14" />
+                  <span>{{ isTesting(channel.id) ? t('channels.testing') : t('channels.test') }}</span>
+                </button>
+                <button
+                  class="channel-protect-btn channel-action-btn"
+                  type="button"
+                  @click="emit('openTestHistory', channel)"
+                >
+                  <History :size="14" />
+                  <span>{{ t('channels.history') }}</span>
+                </button>
+                <button
+                  class="channel-protect-btn channel-action-btn"
+                  type="button"
+                  :disabled="isMemorySaving(channel.id)"
+                  @click="openNoteEditor(channel)"
+                >
+                  <StickyNote :size="14" />
+                  <span>{{ isMemorySaving(channel.id) ? t('channels.savingNote') : t('channels.editNote') }}</span>
+                </button>
+              </div>
+            </div>
+
+            <div class="channel-row-sub">
+              <div class="channel-sub-item channel-sub-models">
+                <span>{{ t('channels.models') }}</span>
+                <strong :title="modelsText(channel)">{{ modelsText(channel) }}</strong>
+              </div>
+              <div class="channel-sub-item">
+                <span>{{ t('channels.weighting') }}</span>
+                <strong>{{ weightText(channel) }}</strong>
+              </div>
+              <div class="channel-sub-item">
+                <span>{{ t('channels.balance') }}</span>
+                <strong>{{ formatBalance(channel.balance) }}</strong>
+              </div>
+              <div class="channel-sub-item">
+                <span>{{ t('channels.latency') }}</span>
+                <strong>{{ formatLatency(channel.responseTimeMs) }}</strong>
+              </div>
+              <div class="channel-sub-item channel-sub-memory">
+                <span>{{ t('channels.memory') }}</span>
+                <strong :title="notePreview(channel)">{{ notePreview(channel) }}</strong>
+              </div>
+            </div>
+          </article>
+        </div>
+      </div>
     </article>
 
     <Teleport to="body">

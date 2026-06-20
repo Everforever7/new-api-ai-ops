@@ -1,9 +1,10 @@
-import { appendFile, mkdir, readFile } from 'node:fs/promises'
+import { appendFile, mkdir, readFile, writeFile } from 'node:fs/promises'
 import { dirname } from 'node:path'
 import type { AppConfig } from './config'
 import type { Channel, ChannelMemory, HealthSnapshot } from './types/domain'
 import { NewApiClient } from './newapi/client'
 import { loadOpsSettings, type OpsSettings } from './settings'
+import { logger } from './logger'
 
 export type ActionStatus =
   | 'queued'
@@ -439,6 +440,28 @@ function payloadRequirementReason(action: OpsAction) {
 async function appendAudit(action: OpsAction) {
   await mkdir(dirname(AUDIT_PATH), { recursive: true })
   await appendFile(AUDIT_PATH, `${JSON.stringify(sanitizeActionForClient(action))}\n`)
+
+  try {
+    const settings = await loadOpsSettings()
+    await pruneActionAudit(settings.storage.maxActionAuditEntries)
+  } catch (error) {
+    logger.warn('failed to prune action audit log', error)
+  }
+}
+
+export async function pruneActionAudit(maxEntries: number) {
+  const limit = Math.max(1, Math.floor(maxEntries))
+
+  try {
+    const raw = await readFile(AUDIT_PATH, 'utf8')
+    const lines = raw.trim().split('\n').filter(Boolean)
+    if (lines.length <= limit) return
+
+    await mkdir(dirname(AUDIT_PATH), { recursive: true })
+    await writeFile(AUDIT_PATH, `${lines.slice(-limit).join('\n')}\n`)
+  } catch (error) {
+    if ((error as { code?: string }).code !== 'ENOENT') throw error
+  }
 }
 
 async function coolingDown(action: OpsAction, settings: OpsSettings) {

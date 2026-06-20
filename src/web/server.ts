@@ -10,6 +10,8 @@ import {
   loadPublicOpsSettings,
   savePublicOpsSettings,
 } from '../settings'
+import { pruneReports } from '../reporters/save'
+import { pruneActionAudit } from '../actions'
 import {
   getChannelMemory,
   getChannelTestHistory,
@@ -283,6 +285,10 @@ async function handleApi(
         throw new Error('invalid settings JSON')
       })
       const saved = await savePublicOpsSettings(body, config)
+      await Promise.all([
+        pruneReports(config.report.saveDir, saved.storage.maxReports),
+        pruneActionAudit(saved.storage.maxActionAuditEntries),
+      ])
       await runtime.refreshActiveTestingScheduler()
       return json(saved)
     }

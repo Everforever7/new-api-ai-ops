@@ -248,6 +248,14 @@ const dictionaries = {
         failureThreshold: '连续失败阈值',
         retentionDays: '历史保留天数',
       },
+      storage: {
+        title: '存储保留',
+        policyTitle: '本地文件上限',
+        maxReports: '报告最大数量',
+        maxReportsHint: '超过上限后删除最旧的 reports/*.md。',
+        maxActionAuditEntries: '审计日志最大条数',
+        maxActionAuditEntriesHint: '超过上限后保留 action-audit.jsonl 最新记录。',
+      },
       llm: {
         title: 'LLM 配置',
         connectionTitle: '模型连接',
@@ -574,6 +582,14 @@ const dictionaries = {
         defaultModelHint: 'Current planned priority: default test model > first channel model > manually requested model.',
         failureThreshold: 'Failure threshold',
         retentionDays: 'History retention days',
+      },
+      storage: {
+        title: 'Storage',
+        policyTitle: 'Local file limits',
+        maxReports: 'Max reports',
+        maxReportsHint: 'Deletes the oldest reports/*.md after the limit.',
+        maxActionAuditEntries: 'Max audit entries',
+        maxActionAuditEntriesHint: 'Keeps the newest action-audit.jsonl records after the limit.',
       },
       llm: {
         title: 'LLM Config',

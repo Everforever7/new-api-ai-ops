@@ -250,6 +250,7 @@ The current version supports controlled execution with these rules:
 - ⚠️ Creating, updating, disabling, and deleting channels are gated by panel permissions and confirmation strategy
 - 🛡️ Protected channel IDs, groups, tags, names, models, and types are skipped for AI modification
 - 📝 Executed, failed, and rejected operations are recorded in `data/action-audit.jsonl`
+- 🧹 Report files and action audit logs can be capped from Settings > Storage
 - 🔀 Discord reports and execution approvals are kept separate
 
 ## 📄 License

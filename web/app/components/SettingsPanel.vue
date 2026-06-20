@@ -5,6 +5,7 @@ import {
   BarChart3,
   Brain,
   Check,
+  Database,
   Edit3,
   FlaskConical,
   Gauge,
@@ -137,6 +138,11 @@ const settingsTabs = computed(() => [
     id: 'activeTesting',
     icon: FlaskConical,
     label: props.t('settings.activeTesting.title'),
+  },
+  {
+    id: 'storage',
+    icon: Database,
+    label: props.t('settings.storage.title'),
   },
   {
     id: 'llm',
@@ -694,6 +700,41 @@ function logout() {
                       : t('settings.llm.clearKey')
                   }}
                 </button>
+              </div>
+            </div>
+          </div>
+
+          <div
+            v-else-if="activeSettingsTab === 'storage'"
+            class="settings-stack"
+            role="tabpanel"
+          >
+            <div class="settings-section">
+              <div class="settings-section-title">
+                <Database :size="18" />
+                <span>{{ t('settings.storage.policyTitle') }}</span>
+              </div>
+              <div class="settings-number-grid active-testing-grid">
+                <label class="settings-field">
+                  <span>{{ t('settings.storage.maxReports') }}</span>
+                  <input
+                    type="number"
+                    min="1"
+                    :value="settingValue('storage.maxReports')"
+                    @input="update('storage.maxReports', Number($event.target.value))"
+                  />
+                  <small>{{ t('settings.storage.maxReportsHint') }}</small>
+                </label>
+                <label class="settings-field">
+                  <span>{{ t('settings.storage.maxActionAuditEntries') }}</span>
+                  <input
+                    type="number"
+                    min="1"
+                    :value="settingValue('storage.maxActionAuditEntries')"
+                    @input="update('storage.maxActionAuditEntries', Number($event.target.value))"
+                  />
+                  <small>{{ t('settings.storage.maxActionAuditEntriesHint') }}</small>
+                </label>
               </div>
             </div>
           </div>
