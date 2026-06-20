@@ -271,9 +271,11 @@ export function createOpsAction(
       ? channelName
       : String(raw.target)
   const channelId =
-    parseChannelId(raw.channel_id) ??
-    parseChannelId(raw.channelId) ??
-    parseChannelId(target)
+    action === 'create_channel'
+      ? undefined
+      : parseChannelId(raw.channel_id) ??
+        parseChannelId(raw.channelId) ??
+        parseChannelId(target)
   const createdAt = now()
 
   return {

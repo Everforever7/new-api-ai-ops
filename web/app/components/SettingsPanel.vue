@@ -5,6 +5,7 @@ import {
   BarChart3,
   Brain,
   Check,
+  ChevronDown,
   Database,
   Edit3,
   FileText,
@@ -51,6 +52,7 @@ const promptEditorDraft = ref('')
 const systemLogs = ref([])
 const systemLogsLoading = ref(false)
 const systemLogsError = ref('')
+const expandedKeywordSnippetIds = ref(new Set())
 
 const permissionRows = computed(() => [
   {
@@ -165,6 +167,11 @@ const settingsTabs = computed(() => [
     label: props.t('settings.prompt.title'),
   },
   {
+    id: 'context',
+    icon: ListChecks,
+    label: props.t('settings.context.tabTitle'),
+  },
+  {
     id: 'activeTesting',
     icon: FlaskConical,
     label: props.t('settings.activeTesting.title'),
@@ -231,6 +238,29 @@ function keywordText(snippet) {
   return Array.isArray(snippet?.keywords) ? snippet.keywords.join(', ') : ''
 }
 
+function keywordSnippetKey(snippet, index) {
+  return snippet?.id || `snippet-${index}`
+}
+
+function keywordSnippetTitle(snippet) {
+  return snippet?.name?.trim() || props.t('settings.keywordSnippets.untitled')
+}
+
+function isKeywordSnippetExpanded(snippet, index) {
+  return expandedKeywordSnippetIds.value.has(keywordSnippetKey(snippet, index))
+}
+
+function toggleKeywordSnippet(snippet, index) {
+  const key = keywordSnippetKey(snippet, index)
+  const next = new Set(expandedKeywordSnippetIds.value)
+  if (next.has(key)) {
+    next.delete(key)
+  } else {
+    next.add(key)
+  }
+  expandedKeywordSnippetIds.value = next
+}
+
 function updateKeywordSnippets(snippets) {
   update('prompt.keywordSnippets', snippets)
 }
@@ -243,19 +273,26 @@ function updateKeywordSnippet(index, patch) {
 }
 
 function addKeywordSnippet() {
+  const id = `snippet-${Date.now()}-${Math.random().toString(36).slice(2)}`
   updateKeywordSnippets([
     ...keywordSnippets.value,
     {
-      id: `snippet-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+      id,
       enabled: true,
       name: '',
       keywords: [],
       content: '',
     },
   ])
+  expandedKeywordSnippetIds.value = new Set([...expandedKeywordSnippetIds.value, id])
 }
 
 function removeKeywordSnippet(index) {
+  const snippet = keywordSnippets.value[index]
+  const key = keywordSnippetKey(snippet, index)
+  const next = new Set(expandedKeywordSnippetIds.value)
+  next.delete(key)
+  expandedKeywordSnippetIds.value = next
   updateKeywordSnippets(keywordSnippets.value.filter((_, itemIndex) => itemIndex !== index))
 }
 
@@ -622,7 +659,29 @@ function logout() {
                   :key="snippet.id || index"
                   class="keyword-snippet-row"
                 >
-                  <div class="keyword-snippet-head">
+                  <div class="keyword-snippet-summary">
+                    <button
+                      class="keyword-snippet-toggle"
+                      type="button"
+                      :aria-expanded="isKeywordSnippetExpanded(snippet, index)"
+                      @click="toggleKeywordSnippet(snippet, index)"
+                    >
+                      <ChevronDown
+                        class="keyword-snippet-chevron"
+                        :class="{ open: isKeywordSnippetExpanded(snippet, index) }"
+                        :size="18"
+                      />
+                      <span>
+                        <strong>{{ keywordSnippetTitle(snippet) }}</strong>
+                        <small>
+                          {{
+                            keywordText(snippet) ||
+                              t('settings.keywordSnippets.noKeywords')
+                          }}
+                        </small>
+                      </span>
+                    </button>
+
                     <button
                       class="setting-switch small"
                       :class="{ active: snippet.enabled !== false }"
@@ -632,16 +691,6 @@ function logout() {
                     >
                       {{ snippet.enabled !== false ? t('settings.on') : t('settings.off') }}
                     </button>
-
-                    <label class="settings-field">
-                      <span>{{ t('settings.keywordSnippets.name') }}</span>
-                      <input
-                        type="text"
-                        :placeholder="t('settings.keywordSnippets.namePlaceholder')"
-                        :value="snippet.name"
-                        @input="updateKeywordSnippet(index, { name: $event.target.value })"
-                      />
-                    </label>
 
                     <button
                       class="bento-btn icon-btn"
@@ -654,28 +703,49 @@ function logout() {
                     </button>
                   </div>
 
-                  <label class="settings-field">
-                    <span>{{ t('settings.keywordSnippets.keywords') }}</span>
-                    <input
-                      type="text"
-                      :placeholder="t('settings.keywordSnippets.keywordsPlaceholder')"
-                      :value="keywordText(snippet)"
-                      @input="updateKeywordSnippet(index, { keywords: parseKeywordInput($event.target.value) })"
-                    />
-                  </label>
+                  <div
+                    v-if="isKeywordSnippetExpanded(snippet, index)"
+                    class="keyword-snippet-body"
+                  >
+                    <label class="settings-field">
+                      <span>{{ t('settings.keywordSnippets.name') }}</span>
+                      <input
+                        type="text"
+                        :placeholder="t('settings.keywordSnippets.namePlaceholder')"
+                        :value="snippet.name"
+                        @input="updateKeywordSnippet(index, { name: $event.target.value })"
+                      />
+                    </label>
 
-                  <label class="settings-field">
-                    <span>{{ t('settings.keywordSnippets.content') }}</span>
-                    <textarea
-                      :placeholder="t('settings.keywordSnippets.contentPlaceholder')"
-                      :value="snippet.content"
-                      @input="updateKeywordSnippet(index, { content: $event.target.value })"
-                    ></textarea>
-                  </label>
+                    <label class="settings-field">
+                      <span>{{ t('settings.keywordSnippets.keywords') }}</span>
+                      <input
+                        type="text"
+                        :placeholder="t('settings.keywordSnippets.keywordsPlaceholder')"
+                        :value="keywordText(snippet)"
+                        @input="updateKeywordSnippet(index, { keywords: parseKeywordInput($event.target.value) })"
+                      />
+                    </label>
+
+                    <label class="settings-field">
+                      <span>{{ t('settings.keywordSnippets.content') }}</span>
+                      <textarea
+                        :placeholder="t('settings.keywordSnippets.contentPlaceholder')"
+                        :value="snippet.content"
+                        @input="updateKeywordSnippet(index, { content: $event.target.value })"
+                      ></textarea>
+                    </label>
+                  </div>
                 </section>
               </div>
             </div>
+          </div>
 
+          <div
+            v-else-if="activeSettingsTab === 'context'"
+            class="settings-stack"
+            role="tabpanel"
+          >
             <div class="settings-section">
               <div class="settings-section-title">
                 <ListChecks :size="18" />

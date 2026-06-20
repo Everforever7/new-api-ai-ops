@@ -328,7 +328,7 @@ const dictionaries = {
         deleteChannel: '删除渠道',
       },
       prompt: {
-        title: '提示词与上下文',
+        title: '提示词',
         reportInstructions: '报告巡检提示词',
         reportHint: '用于 AI 巡检报告的完整报告要求，可调整输出结构、风险条数和动作建议偏好。',
         reportPlaceholder: '例如：列出最多 20 条风险；优先处理连续失败和可恢复渠道；最后输出 proposed_actions JSON。',
@@ -345,6 +345,8 @@ const dictionaries = {
         add: '添加片段',
         remove: '删除片段',
         empty: '暂无关键词提示片段',
+        untitled: '未命名片段',
+        noKeywords: '未设置关键词',
         name: '名称',
         namePlaceholder: '例如：小米渠道',
         keywords: '关键词',
@@ -353,6 +355,7 @@ const dictionaries = {
         contentPlaceholder: '例如：创建小米渠道时，base_url 使用 https://token-plan-cn.xiaomimimo.com，type=1，group=default，priority=30，weight=1，models 使用 mimo-v2.5-pro,mimo-v2.5,mimo-v2-omni。',
       },
       context: {
+        tabTitle: '上下文',
         title: '上下文数据源',
         enabled: '启用共享上下文',
         enabledHint: '助手和巡检报告共用这组数据源；关闭后只保留各自提示词和对话历史。',
@@ -725,7 +728,7 @@ const dictionaries = {
         deleteChannel: 'Delete channel',
       },
       prompt: {
-        title: 'Prompts & Context',
+        title: 'Prompts',
         reportInstructions: 'Inspection report prompt',
         reportHint: 'Full instructions for AI inspection reports; controls report structure, risk count, and action suggestion preferences.',
         reportPlaceholder: 'Example: list up to 20 risks; prioritize repeated failures and recoverable channels; end with proposed_actions JSON.',
@@ -742,6 +745,8 @@ const dictionaries = {
         add: 'Add snippet',
         remove: 'Remove snippet',
         empty: 'No keyword prompt snippets yet',
+        untitled: 'Untitled snippet',
+        noKeywords: 'No keywords',
         name: 'Name',
         namePlaceholder: 'Example: Xiaomi channel',
         keywords: 'Keywords',
@@ -750,6 +755,7 @@ const dictionaries = {
         contentPlaceholder: 'Example: When creating a Xiaomi channel, use base_url https://token-plan-cn.xiaomimimo.com, type=1, group=default, priority=30, weight=1, and models mimo-v2.5-pro,mimo-v2.5,mimo-v2-omni.',
       },
       context: {
+        tabTitle: 'Context',
         title: 'Context Sources',
         enabled: 'Enable shared context',
         enabledHint: 'The assistant and inspection reports use this same data source set; when off, only their prompts and chat history remain.',
