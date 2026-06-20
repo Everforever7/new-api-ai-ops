@@ -1,5 +1,7 @@
 <script setup>
-import { ref } from 'vue'
+import { computed, onMounted, onUnmounted, ref } from 'vue'
+import { getReports } from '../api'
+import { buildReportToneMap, reportToneIndex } from '../reportTones'
 import {
   ChevronDown,
   ChevronRight,
@@ -31,7 +33,9 @@ const emit = defineEmits([
 ])
 const expandedQueueIds = ref(new Set())
 const expandedAuditIds = ref(new Set())
-const REPORT_TONE_COUNT = 6
+const reports = ref([])
+const reportToneByName = computed(() => buildReportToneMap(reports.value))
+let reportPollingTimer = null
 
 function actionLabel(action) {
   return props.t(`actions.labels.${action.action}`)
@@ -54,18 +58,26 @@ function sourceLabel(source) {
   return props.t(`actions.source.${source || 'unknown'}`)
 }
 
-function toneIndex(value) {
-  const text = String(value || '')
-  let hash = 0
-  for (const char of text) {
-    hash = (hash * 31 + char.charCodeAt(0)) >>> 0
+async function loadReports() {
+  try {
+    reports.value = await getReports()
+  } catch {
+    // Keep action loading quiet if report history is temporarily unavailable.
   }
-  return hash % REPORT_TONE_COUNT
+}
+
+function refreshActions() {
+  void loadReports()
+  emit('refreshActions')
 }
 
 function actionToneClass(action) {
   if (action.source === 'report') {
-    return `action-tone-report-${toneIndex(action.reportName || action.id)}`
+    return `action-tone-report-${reportToneIndex(
+      action.reportName,
+      reportToneByName.value,
+      action.id
+    )}`
   }
   if (action.source === 'active_test') return 'action-tone-active-test'
   if (action.source === 'assistant') return 'action-tone-assistant'
@@ -170,6 +182,15 @@ function toggleAuditAction(action) {
   }
   expandedAuditIds.value = next
 }
+
+onMounted(() => {
+  loadReports()
+  reportPollingTimer = setInterval(loadReports, 30000)
+})
+
+onUnmounted(() => {
+  if (reportPollingTimer) clearInterval(reportPollingTimer)
+})
 </script>
 
 <template>
@@ -201,7 +222,7 @@ function toggleAuditAction(action) {
             :disabled="loading"
             :aria-label="t('actions.refresh')"
             :title="t('actions.refresh')"
-            @click="emit('refreshActions')"
+            @click="refreshActions"
           >
             <RefreshCw :size="18" />
           </button>
@@ -372,7 +393,7 @@ function toggleAuditAction(action) {
             :disabled="loading"
             :aria-label="t('actions.refresh')"
             :title="t('actions.refresh')"
-            @click="emit('refreshActions')"
+            @click="refreshActions"
           >
             <RefreshCw :size="18" />
           </button>

@@ -1,6 +1,7 @@
 <script setup>
-import { ref, onMounted, onUnmounted } from 'vue'
+import { computed, ref, onMounted, onUnmounted } from 'vue'
 import { getReports } from '../api'
+import { buildReportToneMap } from '../reportTones'
 import { ChevronDown, ChevronRight, FileText, Loader2, Calendar } from 'lucide-vue-next'
 
 const props = defineProps({
@@ -12,7 +13,7 @@ const reports = ref([])
 const loading = ref(true)
 const expandedIds = ref(new Set())
 let pollingTimer = null
-const REPORT_TONE_COUNT = 6
+const reportToneByName = computed(() => buildReportToneMap(reports.value))
 
 async function loadReports() {
   try {
@@ -38,17 +39,8 @@ function toggleExpand(id) {
   expandedIds.value = newSet
 }
 
-function toneIndex(value) {
-  const text = String(value || '')
-  let hash = 0
-  for (const char of text) {
-    hash = (hash * 31 + char.charCodeAt(0)) >>> 0
-  }
-  return hash % REPORT_TONE_COUNT
-}
-
 function reportToneClass(report) {
-  return `report-tone-${toneIndex(report?.name)}`
+  return `report-tone-${reportToneByName.value.get(report?.name) ?? 0}`
 }
 
 onMounted(() => {
@@ -151,16 +143,16 @@ onUnmounted(() => {
   --report-tone-bg: rgba(10, 132, 255, 0.12);
 }
 .report-card.report-tone-1 {
-  --report-tone: #30d158;
-  --report-tone-bg: rgba(48, 209, 88, 0.12);
+  --report-tone: #00c7be;
+  --report-tone-bg: rgba(0, 199, 190, 0.12);
 }
 .report-card.report-tone-2 {
   --report-tone: #ff9f0a;
   --report-tone-bg: rgba(255, 159, 10, 0.13);
 }
 .report-card.report-tone-3 {
-  --report-tone: #ff375f;
-  --report-tone-bg: rgba(255, 55, 95, 0.12);
+  --report-tone: #ff453a;
+  --report-tone-bg: rgba(255, 69, 58, 0.12);
 }
 .report-card.report-tone-4 {
   --report-tone: #64d2ff;
@@ -169,6 +161,30 @@ onUnmounted(() => {
 .report-card.report-tone-5 {
   --report-tone: #5e5ce6;
   --report-tone-bg: rgba(94, 92, 230, 0.13);
+}
+.report-card.report-tone-6 {
+  --report-tone: #ff2d55;
+  --report-tone-bg: rgba(255, 45, 85, 0.12);
+}
+.report-card.report-tone-7 {
+  --report-tone: #66d4cf;
+  --report-tone-bg: rgba(102, 212, 207, 0.13);
+}
+.report-card.report-tone-8 {
+  --report-tone: #ffd60a;
+  --report-tone-bg: rgba(255, 214, 10, 0.14);
+}
+.report-card.report-tone-9 {
+  --report-tone: #ac8e68;
+  --report-tone-bg: rgba(172, 142, 104, 0.14);
+}
+.report-card.report-tone-10 {
+  --report-tone: #8fd14f;
+  --report-tone-bg: rgba(143, 209, 79, 0.13);
+}
+.report-card.report-tone-11 {
+  --report-tone: #ff7a45;
+  --report-tone-bg: rgba(255, 122, 69, 0.13);
 }
 .report-card-header {
   display: flex;
