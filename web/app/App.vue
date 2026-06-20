@@ -138,10 +138,63 @@ const channelMemoryById = computed(() => {
 
 const timeUntilNextRunMs = ref(0)
 let countdownTimer = null
+let statusPollingTimer = null
+let statusPollingInFlight = false
+
+function stopStatusPolling() {
+  if (!statusPollingTimer) return
+  clearInterval(statusPollingTimer)
+  statusPollingTimer = null
+}
+
+function upsertStatus(nextStatus) {
+  status.value = nextStatus
+  if (Array.isArray(nextStatus?.lastActions)) {
+    actions.value = nextStatus.lastActions.filter(isOpenAction)
+  }
+}
+
+async function pollStatusAfterCountdownElapsed() {
+  if (!isLoggedIn.value || statusPollingInFlight) return
+
+  statusPollingInFlight = true
+  const previousLastRunAt = status.value?.lastRunAt || ''
+  try {
+    const nextStatus = await getStatus()
+    upsertStatus(nextStatus)
+    updateCountdown()
+
+    const nextLastRunAt = nextStatus?.lastRunAt || ''
+    const runAdvanced = Boolean(
+      previousLastRunAt &&
+      nextLastRunAt &&
+      nextLastRunAt !== previousLastRunAt
+    )
+
+    if (!nextStatus?.running && timeUntilNextRunMs.value > 0) {
+      stopStatusPolling()
+      if (runAdvanced) {
+        await refreshAll({ initialStatus: nextStatus })
+        await loadActions()
+      }
+    }
+  } catch {
+    // Keep countdown polling quiet; manual refresh still surfaces errors.
+  } finally {
+    statusPollingInFlight = false
+  }
+}
+
+function startStatusPolling() {
+  if (statusPollingTimer || !isLoggedIn.value) return
+  void pollStatusAfterCountdownElapsed()
+  statusPollingTimer = setInterval(pollStatusAfterCountdownElapsed, 5000)
+}
 
 function updateCountdown() {
   if (!status.value?.lastRunAt || !status.value?.config?.reportIntervalMinutes) {
     timeUntilNextRunMs.value = 0
+    stopStatusPolling()
     return
   }
   const lastRun = new Date(status.value.lastRunAt).getTime()
@@ -149,6 +202,12 @@ function updateCountdown() {
   const nextRun = lastRun + interval
   const now = Date.now()
   timeUntilNextRunMs.value = Math.max(0, nextRun - now)
+
+  if (timeUntilNextRunMs.value <= 0) {
+    startStatusPolling()
+  } else if (!status.value?.running) {
+    stopStatusPolling()
+  }
 }
 
 const timeUntilNextRunText = computed(() => {
@@ -806,6 +865,7 @@ function loadInitialData(initialStatus = null) {
 }
 
 function resetAuthenticatedState() {
+  stopStatusPolling()
   status.value = null
   channels.value = []
   channelMemories.value = []
@@ -833,6 +893,7 @@ function resetAuthenticatedState() {
   testHistoryChannel.value = null
   testHistoryRuns.value = []
   testHistoryLoading.value = false
+  timeUntilNextRunMs.value = 0
 }
 
 function handleUnauthorized() {
@@ -855,6 +916,7 @@ onMounted(() => {
 onBeforeUnmount(() => {
   window.removeEventListener('auth:unauthorized', handleUnauthorized)
   if (countdownTimer) clearInterval(countdownTimer)
+  stopStatusPolling()
 })
 </script>
 
