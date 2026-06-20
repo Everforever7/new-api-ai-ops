@@ -436,7 +436,7 @@ async function handleApi(
     }
 
     if (url.pathname === '/api/assistant/session' && req.method === 'GET') {
-      return json(runtime.getAssistantSession())
+      return json(await runtime.refreshAssistantContext())
     }
 
     if (url.pathname === '/api/assistant/reset' && req.method === 'POST') {

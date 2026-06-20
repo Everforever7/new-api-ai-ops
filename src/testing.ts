@@ -156,6 +156,13 @@ function syncMemoryStoreWithChannels(
   settings: OpsSettings
 ) {
   let changed = false
+  const channelIds = new Set(channels.map((channel) => channel.id))
+
+  for (const [key, memory] of Object.entries(store)) {
+    if (channelIds.has(memory.channelId)) continue
+    delete store[key]
+    changed = true
+  }
 
   for (const channel of channels) {
     const id = String(channel.id)
@@ -331,7 +338,10 @@ export async function getChannelTestHistory(options: {
   }
 }
 
-async function pruneHistory(historyLimit: number) {
+async function pruneHistory(
+  historyLimit: number,
+  validChannelIds?: Set<number>
+) {
   const limit = Math.max(1, Math.floor(historyLimit))
   try {
     const raw = await readFile(TEST_HISTORY_PATH, 'utf8')
@@ -349,6 +359,9 @@ async function pruneHistory(historyLimit: number) {
           item
         ): item is { index: number; line: string; run: ChannelTestRun } =>
           Boolean(item.run)
+      )
+      .filter((item) =>
+        validChannelIds ? validChannelIds.has(item.run.channelId) : true
       )
 
     const countsByChannel = new Map<number, number>()
@@ -557,11 +570,14 @@ export async function listSyncedChannelMemories(
     (channels || []).map((channel) => [channel.id, channel] as const)
   )
 
-  if (channels?.length && syncMemoryStoreWithChannels(store, channels, effectiveSettings)) {
+  if (channels && syncMemoryStoreWithChannels(store, channels, effectiveSettings)) {
     await saveMemoryStore(store)
   }
 
   return Object.values(store)
+    .filter((memory) =>
+      channels ? channelById.has(memory.channelId) : true
+    )
     .map((memory) => {
       const channel = channelById.get(memory.channelId)
       return channel
@@ -619,11 +635,11 @@ export async function saveChannelMemory(
 async function updateMemoriesFromRuns(
   runs: ChannelTestRun[],
   settings: OpsSettings,
-  channels: Channel[] = []
+  channels?: Channel[]
 ) {
   const store = await loadMemoryStore()
   const updated: ChannelMemory[] = []
-  const synced = channels.length
+  const synced = channels
     ? syncMemoryStoreWithChannels(store, channels, settings)
     : false
 
@@ -656,7 +672,10 @@ export async function runChannelTests(
   )
 
   await appendTestRuns(runs)
-  await pruneHistory(settings.activeTesting.historyLimit)
+  await pruneHistory(
+    settings.activeTesting.historyLimit,
+    new Set(channelData.items.map((channel) => channel.id))
+  )
   const memories = await updateMemoriesFromRuns(runs, settings, channelData.items)
 
   return {

@@ -30,6 +30,7 @@ import {
 } from './assistant'
 import { loadOpsSettings } from './settings'
 import {
+  getChannelMemoryPromptSummary,
   runChannelTests as runChannelTestsNow,
   type RunChannelTestsOptions,
 } from './testing'
@@ -173,6 +174,16 @@ export class OpsRuntime {
       lastMemorySummary: this.assistantLastMemorySummary,
       updatedAt: this.assistantUpdatedAt,
     }
+  }
+
+  async refreshAssistantContext() {
+    const settings = await loadOpsSettings()
+    this.assistantLastMemorySummary =
+      settings.context.enabled && settings.context.includeChannelMemory
+        ? await getChannelMemoryPromptSummary(this.config)
+        : []
+    this.assistantUpdatedAt = new Date().toISOString()
+    return this.getAssistantSession()
   }
 
   resetAssistantSession() {
