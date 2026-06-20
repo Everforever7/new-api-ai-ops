@@ -949,11 +949,19 @@ th { font-weight: 600; color: var(--text-muted); font-size: 13px; }
   background: var(--surface-hover);
 }
 
+.action-card-queue,
 .action-card-audit {
   gap: 0;
   padding: 0;
-  background: var(--surface);
   overflow: hidden;
+}
+
+.action-card-queue {
+  background: var(--surface-hover);
+}
+
+.action-card-audit {
+  background: var(--surface);
 }
 
 .action-card-main {
@@ -962,25 +970,33 @@ th { font-weight: 600; color: var(--text-muted); font-size: 13px; }
   gap: 12px;
 }
 
-.action-audit-summary {
+.action-card-summary {
   cursor: pointer;
   padding: 14px;
   transition: background 0.2s;
 }
 
-.action-audit-summary:hover {
+.action-card-summary:hover {
   background: var(--surface-hover);
 }
 
-.action-audit-summary:focus-visible {
+.action-card-summary:focus-visible {
   outline: 2px solid var(--primary);
   outline-offset: -2px;
 }
 
-.action-audit-details {
+.action-card-details {
   padding: 14px;
   border-top: 1px solid var(--border);
   background: var(--bg);
+}
+
+.action-card-queue .action-card-actions {
+  padding: 0 14px 14px;
+}
+
+.action-card-details + .action-card-actions {
+  padding-top: 14px;
 }
 
 .action-expand-icon {

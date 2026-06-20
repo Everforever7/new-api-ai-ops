@@ -23,6 +23,7 @@ const props = defineProps({
 })
 
 const emit = defineEmits(['executeAction', 'rejectAction', 'refreshActions'])
+const expandedQueueIds = ref(new Set())
 const expandedAuditIds = ref(new Set())
 
 function actionLabel(action) {
@@ -111,16 +112,31 @@ function createChannelKeyState(action) {
   return key ? props.t('actions.createPreview.keyConfigured') : props.t('actions.createPreview.keyMissing')
 }
 
-function auditActionKey(action) {
+function actionKey(action) {
   return String(action.id || `${action.action}-${action.channelId}-${action.updatedAt || action.executedAt || action.createdAt}`)
 }
 
+function queueExpanded(action) {
+  return expandedQueueIds.value.has(actionKey(action))
+}
+
 function auditExpanded(action) {
-  return expandedAuditIds.value.has(auditActionKey(action))
+  return expandedAuditIds.value.has(actionKey(action))
+}
+
+function toggleQueueAction(action) {
+  const key = actionKey(action)
+  const next = new Set(expandedQueueIds.value)
+  if (next.has(key)) {
+    next.delete(key)
+  } else {
+    next.add(key)
+  }
+  expandedQueueIds.value = next
 }
 
 function toggleAuditAction(action) {
-  const key = auditActionKey(action)
+  const key = actionKey(action)
   const next = new Set(expandedAuditIds.value)
   if (next.has(key)) {
     next.delete(key)
@@ -179,11 +195,26 @@ function toggleAuditAction(action) {
             <article
               v-for="action in actions"
               :key="action.id"
-              class="action-card"
+              class="action-card action-card-queue"
+              :class="{ expanded: queueExpanded(action) }"
             >
-              <div class="action-card-main">
+              <div
+                class="action-card-main action-card-summary"
+                role="button"
+                tabindex="0"
+                :aria-expanded="queueExpanded(action)"
+                :aria-label="queueExpanded(action) ? t('actions.collapseDetails') : t('actions.expandDetails')"
+                :title="queueExpanded(action) ? t('actions.collapseDetails') : t('actions.expandDetails')"
+                @click="toggleQueueAction(action)"
+                @keydown.enter.prevent="toggleQueueAction(action)"
+                @keydown.space.prevent="toggleQueueAction(action)"
+              >
                 <div class="action-card-top">
                   <div class="action-meta">
+                    <div class="action-expand-icon">
+                      <ChevronDown v-if="queueExpanded(action)" :size="18" />
+                      <ChevronRight v-else :size="18" />
+                    </div>
                     <div class="action-icon">
                       <Sparkles :size="18" />
                     </div>
@@ -209,7 +240,12 @@ function toggleAuditAction(action) {
                     </span>
                   </div>
                 </div>
+              </div>
 
+              <div
+                v-if="queueExpanded(action)"
+                class="action-card-main action-card-details"
+              >
                 <p class="action-reason">{{ action.reason }}</p>
                 <p v-if="action.statusReason" class="action-status-reason">
                   {{ action.statusReason }}
@@ -313,7 +349,7 @@ function toggleAuditAction(action) {
               :class="{ expanded: auditExpanded(action) }"
             >
               <div
-                class="action-card-main action-audit-summary"
+                class="action-card-main action-card-summary"
                 role="button"
                 tabindex="0"
                 :aria-expanded="auditExpanded(action)"
@@ -357,7 +393,7 @@ function toggleAuditAction(action) {
 
               <div
                 v-if="auditExpanded(action)"
-                class="action-card-main action-audit-details"
+                class="action-card-main action-card-details"
               >
                 <p class="action-reason">{{ action.reason }}</p>
                 <p v-if="action.statusReason" class="action-status-reason">
