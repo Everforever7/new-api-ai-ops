@@ -5,6 +5,7 @@ import type { Channel, ChannelMemory, HealthSnapshot } from './types/domain'
 import { NewApiClient } from './newapi/client'
 import { loadOpsSettings, type OpsSettings } from './settings'
 import { logger } from './logger'
+import { saveChannelMemory } from './testing'
 
 export type ActionStatus =
   | 'queued'
@@ -20,6 +21,7 @@ export type OpsAction = {
   action: string
   rawAction: string
   source?: 'report' | 'assistant' | 'active_test'
+  reportName?: string
   target?: string
   channelId?: number
   channelName?: string
@@ -262,7 +264,8 @@ function readRawActions(value: unknown): RawAction[] {
 export function createOpsAction(
   raw: RawAction,
   index = 0,
-  source: OpsAction['source'] = 'report'
+  source: OpsAction['source'] = 'report',
+  meta: Pick<OpsAction, 'reportName'> = {}
 ): OpsAction {
   const action = normalizeActionName(raw.action)
   const channelName = readChannelNameFromRaw(raw)
@@ -283,6 +286,7 @@ export function createOpsAction(
     action,
     rawAction: String(raw.action || ''),
     source,
+    reportName: meta.reportName,
     target,
     channelId,
     channelName,
@@ -297,7 +301,10 @@ export function createOpsAction(
   }
 }
 
-export function parseReportActions(report: string): OpsAction[] {
+export function parseReportActions(
+  report: string,
+  meta: Pick<OpsAction, 'reportName'> = {}
+): OpsAction[] {
   const candidates = extractJsonBlocks(report)
   if (!candidates.length) return []
 
@@ -310,7 +317,7 @@ export function parseReportActions(report: string): OpsAction[] {
     }
   }
 
-  return parsed.map((raw, index) => createOpsAction(raw, index, 'report'))
+  return parsed.map((raw, index) => createOpsAction(raw, index, 'report', meta))
 }
 
 function permissionKey(action: string): keyof OpsSettings['aiExecution']['permissions'] | undefined {
@@ -769,7 +776,21 @@ async function executeWithClient(
   if (action.action === 'update_channel') {
     if (!action.channelId) throw new Error('修改渠道需要渠道 ID')
     if (!action.payload) throw new Error('修改渠道需要 payload')
-    return client.updateChannel(action.channelId, sanitizeUpdatePayload(action.payload))
+    const payload = sanitizeUpdatePayload(action.payload)
+    const result = await client.updateChannel(action.channelId, payload)
+    if (Object.prototype.hasOwnProperty.call(payload, 'remark')) {
+      try {
+        await saveChannelMemory(action.channelId, {
+          manualNote: payload.remark,
+        })
+      } catch (error) {
+        logger.warn('failed to sync executed channel remark to memory', {
+          channelId: action.channelId,
+          error,
+        })
+      }
+    }
+    return result
   }
 
   if (action.action === 'disable_channel') {
@@ -877,11 +898,12 @@ function stringifyList(items: unknown[]) {
 export async function buildActionQueue(
   config: AppConfig,
   snapshot: HealthSnapshot,
-  report: string
+  report: string,
+  meta: Pick<OpsAction, 'reportName'> = {}
 ) {
   const settings = await loadOpsSettings()
   const client = new NewApiClient(config.newApi)
-  const parsed = parseReportActions(report)
+  const parsed = parseReportActions(report, meta)
   const evaluated: OpsAction[] = []
 
   for (const action of parsed) {

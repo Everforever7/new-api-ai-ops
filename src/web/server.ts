@@ -20,9 +20,10 @@ import {
 import { pruneReports } from '../reporters/save'
 import { listActionAudit, pruneActionAudit } from '../actions'
 import {
+  cleanChannelMemoryNote,
   getChannelMemory,
   getChannelTestHistory,
-  listChannelMemories,
+  listSyncedChannelMemories,
   saveChannelMemory,
 } from '../testing'
 
@@ -165,11 +166,27 @@ function sanitizeChannel(channel: Channel) {
     statusLabel: statusLabel(channel.status),
     group: channel.group,
     tag: channel.tag,
+    remark: channel.remark,
     models: channel.models,
     balance: channel.balance,
     responseTimeMs: channel.response_time,
     priority: channel.priority,
     weight: channel.weight,
+  }
+}
+
+async function loadChannelForMemorySync(
+  config: AppConfig,
+  channelId: number
+) {
+  try {
+    return await new NewApiClient(config.newApi).getChannel(channelId) as Channel
+  } catch (error) {
+    logger.warn('failed to load channel for remark sync', {
+      channelId,
+      error,
+    })
+    return undefined
   }
 }
 
@@ -357,7 +374,7 @@ async function handleApi(
     }
 
     if (url.pathname === '/api/channel-memory' && req.method === 'GET') {
-      return json(await listChannelMemories())
+      return json(await listSyncedChannelMemories(config))
     }
 
     if (url.pathname === '/api/reports' && req.method === 'GET') {
@@ -387,14 +404,35 @@ async function handleApi(
 
     const memoryMatch = url.pathname.match(/^\/api\/channel-memory\/(\d+)$/)
     if (memoryMatch && req.method === 'GET') {
-      return json(await getChannelMemory(Number(memoryMatch[1])))
+      const channelId = Number(memoryMatch[1])
+      return json(
+        await getChannelMemory(
+          channelId,
+          undefined,
+          await loadChannelForMemorySync(config, channelId)
+        )
+      )
     }
 
     if (memoryMatch && req.method === 'PUT') {
+      const channelId = Number(memoryMatch[1])
       const body = await req.json().catch(() => {
         throw new Error('invalid channel memory JSON')
       })
-      return json(await saveChannelMemory(Number(memoryMatch[1]), body))
+      const manualNote = cleanChannelMemoryNote(
+        isRecord(body) ? body.manualNote : undefined
+      )
+      const client = new NewApiClient(config.newApi)
+      await client.updateChannel(channelId, { remark: manualNote })
+      const channel = await loadChannelForMemorySync(config, channelId)
+      return json(
+        await saveChannelMemory(
+          channelId,
+          { manualNote },
+          undefined,
+          channel ? { ...channel, remark: manualNote } : undefined
+        )
+      )
     }
 
     if (url.pathname === '/api/assistant/session' && req.method === 'GET') {

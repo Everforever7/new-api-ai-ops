@@ -227,7 +227,7 @@ export async function planAssistantResponse(
   const llm = await loadEffectiveLlmConfig(config)
   const settings = await loadOpsSettings()
   const memorySummary = settings.context.enabled && settings.context.includeChannelMemory
-    ? await getChannelMemoryPromptSummary()
+    ? await getChannelMemoryPromptSummary(config)
     : []
   const runtimeContext = llm.apiKey
     ? await collectAssistantRuntimeContext(config, settings.context)
@@ -334,7 +334,7 @@ function buildChatMessages(
     ? [
         {
           role: 'system',
-          content: `渠道记忆摘要（人工备注优先级最高，不能覆盖，只能参考或建议更新）：\n${JSON.stringify(memorySummary, null, 2)}`,
+          content: `渠道记忆摘要（manualNote 来自同步后的 new-api remark，优先级最高；不能覆盖，只能参考或建议更新）：\n${JSON.stringify(memorySummary, null, 2)}`,
         },
       ]
     : []
@@ -516,6 +516,7 @@ function summarizeChannelForAssistant(
     tag: channel.tag,
     models: channel.models,
     baseUrl: channel.base_url,
+    remark: channel.remark,
     priority: channel.priority,
     weight: channel.weight,
     autoBan: channel.auto_ban,

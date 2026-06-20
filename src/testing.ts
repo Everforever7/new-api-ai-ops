@@ -49,6 +49,10 @@ function cleanText(value: unknown, maxLength = MAX_TEXT_LENGTH) {
     .slice(0, maxLength)
 }
 
+export function cleanChannelMemoryNote(value: unknown) {
+  return cleanText(value, MAX_TEXT_LENGTH)
+}
+
 function summarizeUnknown(value: unknown) {
   if (value === undefined) return undefined
   try {
@@ -110,6 +114,74 @@ function isProtectedChannel(channel: Channel, settings: OpsSettings) {
     protectedByText(channel.name, rules.nameIncludes) ||
     protectedByText(channel.models, rules.modelIncludes)
   )
+}
+
+function hasChannelRemark(channel: Channel) {
+  return Object.prototype.hasOwnProperty.call(channel, 'remark')
+}
+
+function readChannelRemark(channel: Channel) {
+  return cleanChannelMemoryNote(channel.remark)
+}
+
+function syncMemoryFromChannel(
+  previous: ChannelMemory | undefined,
+  channel: Channel,
+  settings: OpsSettings
+) {
+  const current = previous || defaultMemory(channel.id)
+  const next: ChannelMemory = {
+    ...current,
+    channelName: channel.name || current.channelName,
+    channelStatus: channel.status ?? current.channelStatus,
+    protected: isProtectedChannel(channel, settings),
+    manualNote: hasChannelRemark(channel)
+      ? readChannelRemark(channel)
+      : current.manualNote,
+  }
+
+  return (
+    next.channelName === current.channelName &&
+    next.channelStatus === current.channelStatus &&
+    next.protected === current.protected &&
+    next.manualNote === current.manualNote
+  )
+    ? current
+    : { ...next, updatedAt: now() }
+}
+
+function syncMemoryStoreWithChannels(
+  store: Record<string, ChannelMemory>,
+  channels: Channel[],
+  settings: OpsSettings
+) {
+  let changed = false
+
+  for (const channel of channels) {
+    const id = String(channel.id)
+    const current = store[id]
+    if (!current && (!hasChannelRemark(channel) || !readChannelRemark(channel))) {
+      continue
+    }
+
+    const next = syncMemoryFromChannel(current, channel, settings)
+    if (!current || next !== current) {
+      store[id] = next
+      changed = true
+    }
+  }
+
+  return changed
+}
+
+async function loadChannelsForMemorySync(config?: AppConfig) {
+  if (!config) return undefined
+
+  try {
+    return (await new NewApiClient(config.newApi).getChannels()).items
+  } catch {
+    return undefined
+  }
 }
 
 function createRunId(channelId: number) {
@@ -474,35 +546,71 @@ export async function listChannelMemories(settings?: OpsSettings) {
     .sort((a, b) => a.channelId - b.channelId)
 }
 
-export async function getChannelMemory(
-  channelId: number,
+export async function listSyncedChannelMemories(
+  config?: AppConfig,
   settings?: OpsSettings
 ) {
   const effectiveSettings = settings || (await loadOpsSettings())
   const store = await loadMemoryStore()
-  const memory = store[String(channelId)] || defaultMemory(channelId)
-  return syncProtectionSnapshot(memory, effectiveSettings)
+  const channels = await loadChannelsForMemorySync(config)
+  const channelById = new Map(
+    (channels || []).map((channel) => [channel.id, channel] as const)
+  )
+
+  if (channels?.length && syncMemoryStoreWithChannels(store, channels, effectiveSettings)) {
+    await saveMemoryStore(store)
+  }
+
+  return Object.values(store)
+    .map((memory) => {
+      const channel = channelById.get(memory.channelId)
+      return channel
+        ? syncMemoryFromChannel(memory, channel, effectiveSettings)
+        : syncProtectionSnapshot(memory, effectiveSettings)
+    })
+    .sort((a, b) => a.channelId - b.channelId)
+}
+
+export async function getChannelMemory(
+  channelId: number,
+  settings?: OpsSettings,
+  channel?: Channel
+) {
+  const effectiveSettings = settings || (await loadOpsSettings())
+  const store = await loadMemoryStore()
+  const current = store[String(channelId)] || defaultMemory(channelId)
+  const memory = channel
+    ? syncMemoryFromChannel(current, channel, effectiveSettings)
+    : syncProtectionSnapshot(current, effectiveSettings)
+
+  if (channel && memory !== current) {
+    store[String(channelId)] = memory
+    await saveMemoryStore(store)
+  }
+
+  return memory
 }
 
 export async function saveChannelMemory(
   channelId: number,
   input: unknown,
-  settings?: OpsSettings
+  settings?: OpsSettings,
+  channel?: Channel
 ) {
   const effectiveSettings = settings || (await loadOpsSettings())
   const store = await loadMemoryStore()
   const current = store[String(channelId)] || defaultMemory(channelId)
   const manualNote = isRecord(input)
-    ? cleanText(input.manualNote, MAX_TEXT_LENGTH)
+    ? cleanChannelMemoryNote(input.manualNote)
     : current.manualNote
-  const next: ChannelMemory = syncProtectionSnapshot(
-    {
-      ...current,
-      manualNote,
-      updatedAt: now(),
-    },
-    effectiveSettings
-  )
+  const base = channel
+    ? syncMemoryFromChannel(current, channel, effectiveSettings)
+    : syncProtectionSnapshot(current, effectiveSettings)
+  const next: ChannelMemory = {
+    ...base,
+    manualNote,
+    updatedAt: now(),
+  }
   store[String(channelId)] = next
   await saveMemoryStore(store)
   return next
@@ -510,10 +618,14 @@ export async function saveChannelMemory(
 
 async function updateMemoriesFromRuns(
   runs: ChannelTestRun[],
-  settings: OpsSettings
+  settings: OpsSettings,
+  channels: Channel[] = []
 ) {
   const store = await loadMemoryStore()
   const updated: ChannelMemory[] = []
+  const synced = channels.length
+    ? syncMemoryStoreWithChannels(store, channels, settings)
+    : false
 
   for (const run of runs) {
     const id = String(run.channelId)
@@ -522,7 +634,7 @@ async function updateMemoriesFromRuns(
     updated.push(next)
   }
 
-  if (runs.length) {
+  if (runs.length || synced) {
     await saveMemoryStore(store)
   }
   return updated
@@ -545,7 +657,7 @@ export async function runChannelTests(
 
   await appendTestRuns(runs)
   await pruneHistory(settings.activeTesting.historyLimit)
-  const memories = await updateMemoriesFromRuns(runs, settings)
+  const memories = await updateMemoriesFromRuns(runs, settings, channelData.items)
 
   return {
     runs,
@@ -554,6 +666,15 @@ export async function runChannelTests(
   }
 }
 
-export async function getChannelMemoryPromptSummary(limit = 30) {
-  return buildChannelMemoryPromptSummary(await listChannelMemories(), limit)
+export async function getChannelMemoryPromptSummary(
+  configOrLimit?: AppConfig | number,
+  limit = 30
+) {
+  const config = typeof configOrLimit === 'number' ? undefined : configOrLimit
+  const effectiveLimit =
+    typeof configOrLimit === 'number' ? configOrLimit : limit
+  return buildChannelMemoryPromptSummary(
+    await listSyncedChannelMemories(config),
+    effectiveLimit
+  )
 }

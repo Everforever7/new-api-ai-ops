@@ -12,6 +12,7 @@ export type Channel = {
   group?: string
   models?: string
   tag?: string | null
+  remark?: string | null
   base_url?: string | null
   balance?: number
   balance_updated_time?: number

@@ -31,6 +31,7 @@ const emit = defineEmits([
 ])
 const expandedQueueIds = ref(new Set())
 const expandedAuditIds = ref(new Set())
+const REPORT_TONE_COUNT = 6
 
 function actionLabel(action) {
   return props.t(`actions.labels.${action.action}`)
@@ -53,20 +54,21 @@ function sourceLabel(source) {
   return props.t(`actions.source.${source || 'unknown'}`)
 }
 
+function toneIndex(value) {
+  const text = String(value || '')
+  let hash = 0
+  for (const char of text) {
+    hash = (hash * 31 + char.charCodeAt(0)) >>> 0
+  }
+  return hash % REPORT_TONE_COUNT
+}
+
 function actionToneClass(action) {
-  if (action.source === 'report') return 'action-tone-report'
+  if (action.source === 'report') {
+    return `action-tone-report-${toneIndex(action.reportName || action.id)}`
+  }
   if (action.source === 'active_test') return 'action-tone-active-test'
-  if (action.source === 'assistant') {
-    return action.action === 'create_channel'
-      ? 'action-tone-create'
-      : 'action-tone-assistant'
-  }
-  if (action.action === 'test_channel') return 'action-tone-test'
-  if (action.action === 'disable_channel' || action.action === 'delete_channel') {
-    return 'action-tone-danger'
-  }
-  if (action.action === 'update_channel') return 'action-tone-update'
-  if (action.action === 'create_channel') return 'action-tone-create'
+  if (action.source === 'assistant') return 'action-tone-assistant'
   return 'action-tone-default'
 }
 

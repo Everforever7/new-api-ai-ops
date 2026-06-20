@@ -660,6 +660,11 @@ async function saveChannelNote(payload) {
     })
     const others = channelMemories.value.filter((item) => item.channelId !== id)
     channelMemories.value = [...others, memory].sort((a, b) => a.channelId - b.channelId)
+    channels.value = channels.value.map((channel) =>
+      Number(channel.id) === id
+        ? { ...channel, remark: memory.manualNote || '' }
+        : channel
+    )
   } catch (error) {
     notifyError('errors.channelMemorySaveFailed', error)
   } finally {

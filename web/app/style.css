@@ -370,10 +370,23 @@ th { font-weight: 600; color: var(--text-muted); font-size: 13px; }
   line-height: 1.4;
 }
 
+.channel-row-main > .status-pill {
+  width: 90px;
+  flex-shrink: 0;
+  justify-content: flex-start;
+}
+
 .channel-test-summary {
-  min-width: 0;
-  display: grid;
+  width: 210px;
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
   gap: 6px;
+}
+
+.channel-test-summary .status-pill {
+  align-self: flex-start;
 }
 
 .channel-row-actions {
@@ -427,6 +440,8 @@ th { font-weight: 600; color: var(--text-muted); font-size: 13px; }
 
 .channel-protect-btn {
   min-height: 34px;
+  width: 90px;
+  flex-shrink: 0;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -1063,9 +1078,34 @@ th { font-weight: 600; color: var(--text-muted); font-size: 13px; }
   background: color-mix(in srgb, var(--surface) 90%, var(--action-tone-bg) 10%);
 }
 
-.action-card.action-tone-report {
+.action-card.action-tone-report-0 {
   --action-tone: #0a84ff;
   --action-tone-bg: rgba(10, 132, 255, 0.13);
+}
+
+.action-card.action-tone-report-1 {
+  --action-tone: #30d158;
+  --action-tone-bg: rgba(48, 209, 88, 0.13);
+}
+
+.action-card.action-tone-report-2 {
+  --action-tone: #ff9f0a;
+  --action-tone-bg: rgba(255, 159, 10, 0.14);
+}
+
+.action-card.action-tone-report-3 {
+  --action-tone: #ff375f;
+  --action-tone-bg: rgba(255, 55, 95, 0.13);
+}
+
+.action-card.action-tone-report-4 {
+  --action-tone: #64d2ff;
+  --action-tone-bg: rgba(100, 210, 255, 0.14);
+}
+
+.action-card.action-tone-report-5 {
+  --action-tone: #5e5ce6;
+  --action-tone-bg: rgba(94, 92, 230, 0.13);
 }
 
 .action-card.action-tone-assistant {
@@ -1074,28 +1114,8 @@ th { font-weight: 600; color: var(--text-muted); font-size: 13px; }
 }
 
 .action-card.action-tone-active-test {
-  --action-tone: #30d158;
-  --action-tone-bg: rgba(48, 209, 88, 0.13);
-}
-
-.action-card.action-tone-create {
-  --action-tone: #64d2ff;
-  --action-tone-bg: rgba(100, 210, 255, 0.14);
-}
-
-.action-card.action-tone-test {
-  --action-tone: #5e5ce6;
-  --action-tone-bg: rgba(94, 92, 230, 0.13);
-}
-
-.action-card.action-tone-update {
-  --action-tone: #ff9f0a;
-  --action-tone-bg: rgba(255, 159, 10, 0.14);
-}
-
-.action-card.action-tone-danger {
-  --action-tone: #ff375f;
-  --action-tone-bg: rgba(255, 55, 95, 0.13);
+  --action-tone: #34c759;
+  --action-tone-bg: rgba(52, 199, 89, 0.13);
 }
 
 .action-card-main {
@@ -2046,6 +2066,17 @@ th { font-weight: 600; color: var(--text-muted); font-size: 13px; }
   .channel-row-main {
     flex-direction: column;
     align-items: stretch;
+  }
+  .channel-row-main > .status-pill {
+    width: auto;
+    align-self: flex-start;
+  }
+  .channel-test-summary {
+    width: auto;
+  }
+  .channel-protect-btn {
+    width: auto;
+    align-self: flex-start;
   }
   .channel-row-actions {
     margin-left: 0;

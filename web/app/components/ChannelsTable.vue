@@ -64,6 +64,7 @@ const filteredChannels = computed(() => {
       channel.type,
       channel.priority,
       channel.weight,
+      channel.remark,
       memory?.manualNote,
       memory?.aiObservation,
     ]
@@ -199,14 +200,23 @@ function testMeta(channel) {
   return parts.join(' · ')
 }
 
+function channelRemark(channel) {
+  return typeof channel.remark === 'string' ? channel.remark.trim() : ''
+}
+
 function notePreview(channel) {
   const memory = memoryFor(channel)
-  return memory?.manualNote || memory?.aiObservation || props.t('channels.noNote')
+  return (
+    memory?.manualNote ||
+    channelRemark(channel) ||
+    memory?.aiObservation ||
+    props.t('channels.noNote')
+  )
 }
 
 function openNoteEditor(channel) {
   noteEditorChannel.value = channel
-  noteEditorDraft.value = memoryFor(channel)?.manualNote || ''
+  noteEditorDraft.value = memoryFor(channel)?.manualNote || channelRemark(channel)
 }
 
 function closeNoteEditor() {

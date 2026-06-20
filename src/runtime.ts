@@ -1,6 +1,6 @@
 import { mkdirSync, readFileSync } from 'node:fs'
 import { writeFile } from 'node:fs/promises'
-import { dirname } from 'node:path'
+import { basename, dirname } from 'node:path'
 import type { AppConfig } from './config'
 import type { Channel, HealthSnapshot } from './types/domain'
 import { generateOpsReport } from './ai/llm'
@@ -590,7 +590,9 @@ export class OpsRuntime {
       logger.info(`saved report: ${reportPath}`)
 
       logger.info('planning AI actions')
-      const actions = await buildActionQueue(this.config, snapshot, report)
+      const actions = await buildActionQueue(this.config, snapshot, report, {
+        reportName: basename(reportPath),
+      })
       const keptActions = this.actions.filter(
         (action) =>
           isOpenAction(action) &&

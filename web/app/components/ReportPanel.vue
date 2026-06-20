@@ -38,8 +38,17 @@ function toggleExpand(id) {
   expandedIds.value = newSet
 }
 
-function reportToneClass(index) {
-  return `report-tone-${index % REPORT_TONE_COUNT}`
+function toneIndex(value) {
+  const text = String(value || '')
+  let hash = 0
+  for (const char of text) {
+    hash = (hash * 31 + char.charCodeAt(0)) >>> 0
+  }
+  return hash % REPORT_TONE_COUNT
+}
+
+function reportToneClass(report) {
+  return `report-tone-${toneIndex(report?.name)}`
 }
 
 onMounted(() => {
@@ -83,13 +92,13 @@ onUnmounted(() => {
            {{ t('report.empty') }}
          </div>
          <div v-else class="reports-list">
-           <div 
-             v-for="(report, index) in reports"
-             :key="report.name" 
-             class="report-card" 
+           <div
+             v-for="report in reports"
+             :key="report.name"
+             class="report-card"
              :class="[
                { expanded: expandedIds.has(report.name) },
-               reportToneClass(index),
+               reportToneClass(report),
              ]"
            >
              <div class="report-card-header" @click="toggleExpand(report.name)">
@@ -142,24 +151,24 @@ onUnmounted(() => {
   --report-tone-bg: rgba(10, 132, 255, 0.12);
 }
 .report-card.report-tone-1 {
-  --report-tone: #af52de;
-  --report-tone-bg: rgba(175, 82, 222, 0.12);
-}
-.report-card.report-tone-2 {
   --report-tone: #30d158;
   --report-tone-bg: rgba(48, 209, 88, 0.12);
 }
-.report-card.report-tone-3 {
+.report-card.report-tone-2 {
   --report-tone: #ff9f0a;
   --report-tone-bg: rgba(255, 159, 10, 0.13);
 }
-.report-card.report-tone-4 {
+.report-card.report-tone-3 {
   --report-tone: #ff375f;
   --report-tone-bg: rgba(255, 55, 95, 0.12);
 }
-.report-card.report-tone-5 {
+.report-card.report-tone-4 {
   --report-tone: #64d2ff;
   --report-tone-bg: rgba(100, 210, 255, 0.13);
+}
+.report-card.report-tone-5 {
+  --report-tone: #5e5ce6;
+  --report-tone-bg: rgba(94, 92, 230, 0.13);
 }
 .report-card-header {
   display: flex;
