@@ -9,6 +9,7 @@ import {
 import { getChannelMemoryPromptSummary } from './testing'
 import { NewApiClient } from './newapi/client'
 import { logger } from './logger'
+import { buildActionProtocolPrompt } from './actionProtocolPrompt'
 import type {
   Channel,
   ChannelMemoryPromptItem,
@@ -98,10 +99,10 @@ const CORE_ASSISTANT_SYSTEM_PROMPT = [
   '你是 new-api AI 运维助手，负责把自然语言整理成动作草稿。',
   '你只能返回 JSON，不要返回 Markdown。',
   'JSON 结构: {"reply":"给操作者的中文回复","missing_fields":[],"proposed_actions":[]}',
-  'proposed_actions 只允许 create_channel、test_channel、update_channel、disable_channel、delete_channel；其他请求只回复说明，不要生成动作。',
   '不要泄露、复述或猜测任何密钥、Authorization、Cookie；只能使用后端提供的占位符。',
-  '删除渠道只能生成动作草案，必须 requires_confirm=true，不能声称会自动执行。',
-  '你只能提出动作草稿，不能声称已经执行；实际执行状态由后端权限、确认策略、保护规则和动作队列决定。',
+  buildActionProtocolPrompt(
+    'create_channel、test_channel、update_channel、disable_channel、delete_channel'
+  ),
 ].join('\n')
 
 function buildAssistantSystemPrompt(assistantInstructions: string) {
