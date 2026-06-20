@@ -915,6 +915,26 @@ th { font-weight: 600; color: var(--text-muted); font-size: 13px; }
   font-weight: 600;
 }
 
+.actions-split {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 16px;
+  align-items: stretch;
+}
+
+.actions-pane {
+  min-width: 0;
+}
+
+.actions-pane .action-card-top {
+  flex-direction: column;
+}
+
+.actions-pane .action-badges {
+  justify-content: flex-start;
+}
+
 .action-card {
   display: grid;
   gap: 16px;
@@ -1818,6 +1838,7 @@ th { font-weight: 600; color: var(--text-muted); font-size: 13px; }
 @media (max-width: 1024px) {
   .bento-grid { grid-template-columns: repeat(2, 1fr); }
   .bento-hero, .bento-full, .bento-wide { grid-column: span 2; }
+  .actions-split { grid-template-columns: 1fr; }
   .settings-number-grid, .settings-llm-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .channel-row-main {
     flex-direction: column;

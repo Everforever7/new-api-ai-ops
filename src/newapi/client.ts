@@ -1,3 +1,5 @@
+import { mkdir, readFile, rm, writeFile } from 'node:fs/promises'
+import { dirname } from 'node:path'
 import type { AppConfig } from '../config'
 import type {
   ApiEnvelope,
@@ -17,6 +19,22 @@ type LoginData = {
   id?: number | string
 }
 
+type SharedSession = {
+  key: string
+  cookie: string
+  userId?: string
+  updatedAt: string
+}
+
+const SESSION_PATH =
+  process.env.AI_OPS_NEWAPI_SESSION_PATH?.trim() || 'data/newapi-session.json'
+const sharedSessions = new Map<string, SharedSession>()
+const sharedLoginPromises = new Map<string, Promise<void>>()
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === 'object' && !Array.isArray(value)
+}
+
 function buildQuery(query: RequestOptions['query']): string {
   if (!query) return ''
   const params = new URLSearchParams()
@@ -28,14 +46,71 @@ function buildQuery(query: RequestOptions['query']): string {
   return text ? `?${text}` : ''
 }
 
+function buildSessionKey(config: AppConfig['newApi']) {
+  return `${config.baseUrl}\n${config.username || ''}`
+}
+
+function readSessionRecord(value: unknown): SharedSession | undefined {
+  if (!isRecord(value)) return undefined
+  if (typeof value.key !== 'string') return undefined
+  if (typeof value.cookie !== 'string' || !value.cookie.trim()) return undefined
+  return {
+    key: value.key,
+    cookie: value.cookie,
+    userId: typeof value.userId === 'string' ? value.userId : undefined,
+    updatedAt:
+      typeof value.updatedAt === 'string'
+        ? value.updatedAt
+        : new Date().toISOString(),
+  }
+}
+
+async function loadSharedSession(key: string) {
+  const cached = sharedSessions.get(key)
+  if (cached) return cached
+
+  try {
+    const raw = await readFile(SESSION_PATH, 'utf8')
+    const session = readSessionRecord(JSON.parse(raw))
+    if (!session || session.key !== key) return undefined
+    sharedSessions.set(key, session)
+    return session
+  } catch (error) {
+    if ((error as { code?: string }).code === 'ENOENT') return undefined
+    return undefined
+  }
+}
+
+async function saveSharedSession(session: SharedSession) {
+  sharedSessions.set(session.key, session)
+  await mkdir(dirname(SESSION_PATH), { recursive: true })
+  await writeFile(SESSION_PATH, `${JSON.stringify(session, null, 2)}\n`)
+}
+
+async function clearSharedSession(key: string) {
+  sharedSessions.delete(key)
+  try {
+    const raw = await readFile(SESSION_PATH, 'utf8')
+    const session = readSessionRecord(JSON.parse(raw))
+    if (session?.key === key) {
+      await rm(SESSION_PATH, { force: true })
+    }
+  } catch (error) {
+    if ((error as { code?: string }).code !== 'ENOENT') {
+      return
+    }
+  }
+}
+
 export class NewApiClient {
   private readonly config: AppConfig['newApi']
+  private readonly sessionKey: string
   private sessionCookie?: string
   private sessionUserId?: string
-  private loginPromise?: Promise<void>
 
   constructor(config: AppConfig['newApi']) {
     this.config = config
+    this.sessionKey = buildSessionKey(config)
     this.sessionCookie = config.cookie
     this.sessionUserId = config.userHeader
   }
@@ -149,6 +224,7 @@ export class NewApiClient {
         if (response.status === 401 && retryAfterLogin) {
           this.sessionCookie = undefined
           this.sessionUserId = this.config.userHeader
+          await clearSharedSession(this.sessionKey)
           await this.ensureSession(true)
           return this.requestWithSession<T>(path, options, false)
         }
@@ -174,14 +250,34 @@ export class NewApiClient {
 
   private async ensureSession(force = false) {
     if (!force && this.sessionCookie) return
+    if (this.config.cookie) return
+    if (this.config.authorization) return
+
+    if (!force && await this.applySharedSession()) return
     if (!this.config.username || !this.config.password) return
 
-    this.loginPromise ??= this.login()
-    try {
-      await this.loginPromise
-    } finally {
-      this.loginPromise = undefined
+    if (force) {
+      await clearSharedSession(this.sessionKey)
     }
+
+    let loginPromise = sharedLoginPromises.get(this.sessionKey)
+    if (!loginPromise) {
+      loginPromise = this.login().finally(() => {
+        sharedLoginPromises.delete(this.sessionKey)
+      })
+      sharedLoginPromises.set(this.sessionKey, loginPromise)
+    }
+
+    await loginPromise
+    if (!this.sessionCookie) await this.applySharedSession()
+  }
+
+  private async applySharedSession() {
+    const session = await loadSharedSession(this.sessionKey)
+    if (!session) return false
+    this.sessionCookie = session.cookie
+    this.sessionUserId = this.config.userHeader || session.userId
+    return true
   }
 
   private async login() {
@@ -222,6 +318,12 @@ export class NewApiClient {
       if (userId !== undefined && userId !== null) {
         this.sessionUserId = String(userId)
       }
+      await saveSharedSession({
+        key: this.sessionKey,
+        cookie,
+        userId: this.sessionUserId,
+        updatedAt: new Date().toISOString(),
+      })
     } finally {
       clearTimeout(timeout)
     }

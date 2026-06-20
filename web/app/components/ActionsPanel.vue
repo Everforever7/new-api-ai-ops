@@ -124,229 +124,231 @@ function createChannelKeyState(action) {
       </div>
     </article>
 
-    <article class="bento-item bento-full adaptive-bento">
-      <div class="bento-header">
-        <div>
-          <h3>{{ t('actions.queueTitle') }}</h3>
-          <p class="settings-help-text">{{ t('actions.queueHint') }}</p>
-        </div>
-        <button
-          class="bento-btn icon-btn"
-          type="button"
-          :disabled="loading"
-          :aria-label="t('actions.refresh')"
-          :title="t('actions.refresh')"
-          @click="emit('refreshActions')"
-        >
-          <RefreshCw :size="18" />
-        </button>
-      </div>
-
-      <div class="bento-body">
-        <div v-if="loading" class="actions-empty">
-          {{ t('actions.loading') }}
-        </div>
-
-        <div v-else-if="!actions.length" class="actions-empty">
-          {{ t('actions.empty') }}
-        </div>
-
-        <div v-else class="actions-list">
-          <article
-            v-for="action in actions"
-            :key="action.id"
-            class="action-card"
+    <div class="actions-split">
+      <article class="bento-item adaptive-bento actions-pane">
+        <div class="bento-header">
+          <div>
+            <h3>{{ t('actions.queueTitle') }}</h3>
+            <p class="settings-help-text">{{ t('actions.queueHint') }}</p>
+          </div>
+          <button
+            class="bento-btn icon-btn"
+            type="button"
+            :disabled="loading"
+            :aria-label="t('actions.refresh')"
+            :title="t('actions.refresh')"
+            @click="emit('refreshActions')"
           >
-            <div class="action-card-main">
-              <div class="action-card-top">
-                <div class="action-meta">
-                  <div class="action-icon">
-                    <Sparkles :size="18" />
+            <RefreshCw :size="18" />
+          </button>
+        </div>
+
+        <div class="bento-body">
+          <div v-if="loading" class="actions-empty">
+            {{ t('actions.loading') }}
+          </div>
+
+          <div v-else-if="!actions.length" class="actions-empty">
+            {{ t('actions.empty') }}
+          </div>
+
+          <div v-else class="actions-list">
+            <article
+              v-for="action in actions"
+              :key="action.id"
+              class="action-card"
+            >
+              <div class="action-card-main">
+                <div class="action-card-top">
+                  <div class="action-meta">
+                    <div class="action-icon">
+                      <Sparkles :size="18" />
+                    </div>
+                    <div>
+                      <div class="action-title">{{ actionLabel(action) }}</div>
+                      <div class="action-subtitle">
+                        {{ actionTarget(action) }}
+                      </div>
+                    </div>
                   </div>
-                  <div>
-                    <div class="action-title">{{ actionLabel(action) }}</div>
-                    <div class="action-subtitle">
-                      {{ actionTarget(action) }}
+                  <div class="action-badges">
+                    <span class="status-pill compact" :class="statusClass(action.status)">
+                      <span class="status-dot"></span>
+                      {{ statusLabel(action.status) }}
+                    </span>
+                    <span class="action-risk" :class="action.risk">
+                      <ShieldAlert :size="14" />
+                      {{ t(`actions.risk.${action.risk}`) }}
+                    </span>
+                    <span class="action-time">
+                      <Clock3 :size="14" />
+                      {{ actionTime(action).label }} {{ actionTime(action).value }}
+                    </span>
+                  </div>
+                </div>
+
+                <p class="action-reason">{{ action.reason }}</p>
+                <p v-if="action.statusReason" class="action-status-reason">
+                  {{ action.statusReason }}
+                </p>
+
+                <div
+                  v-if="createChannelPayload(action)"
+                  class="create-action-preview"
+                >
+                  <div class="create-action-key-row">
+                    <span>{{ t('actions.createPreview.apiKey') }}</span>
+                    <strong>{{ createChannelKeyState(action) }}</strong>
+                  </div>
+                  <div class="create-action-grid">
+                    <div
+                      v-for="field in createChannelFields(action)"
+                      :key="field.key"
+                      class="create-action-field"
+                    >
+                      <span>{{ field.label }}</span>
+                      <strong>{{ field.value }}</strong>
                     </div>
                   </div>
                 </div>
-                <div class="action-badges">
-                  <span class="status-pill compact" :class="statusClass(action.status)">
-                    <span class="status-dot"></span>
-                    {{ statusLabel(action.status) }}
-                  </span>
-                  <span class="action-risk" :class="action.risk">
-                    <ShieldAlert :size="14" />
-                    {{ t(`actions.risk.${action.risk}`) }}
-                  </span>
-                  <span class="action-time">
-                    <Clock3 :size="14" />
-                    {{ actionTime(action).label }} {{ actionTime(action).value }}
-                  </span>
-                </div>
+
+                <pre v-else-if="action.payload" class="minimal-pre action-payload">{{
+                  JSON.stringify(action.payload, null, 2)
+                }}</pre>
               </div>
 
-              <p class="action-reason">{{ action.reason }}</p>
-              <p v-if="action.statusReason" class="action-status-reason">
-                {{ action.statusReason }}
-              </p>
+              <div class="action-card-actions">
+                <button
+                  v-if="action.status === 'pending_confirmation' || action.status === 'queued'"
+                  class="bento-btn primary"
+                  type="button"
+                  :disabled="isExecuting(action.id)"
+                  @click="emit('executeAction', action.id)"
+                >
+                  <Play :size="16" />
+                  <span>{{
+                    isExecuting(action.id)
+                      ? t('actions.executing')
+                      : t('actions.execute')
+                  }}</span>
+                </button>
 
-              <div
-                v-if="createChannelPayload(action)"
-                class="create-action-preview"
-              >
-                <div class="create-action-key-row">
-                  <span>{{ t('actions.createPreview.apiKey') }}</span>
-                  <strong>{{ createChannelKeyState(action) }}</strong>
-                </div>
-                <div class="create-action-grid">
-                  <div
-                    v-for="field in createChannelFields(action)"
-                    :key="field.key"
-                    class="create-action-field"
-                  >
-                    <span>{{ field.label }}</span>
-                    <strong>{{ field.value }}</strong>
-                  </div>
+                <button
+                  v-if="action.status === 'pending_confirmation' || action.status === 'queued'"
+                  class="bento-btn"
+                  type="button"
+                  :disabled="isExecuting(action.id)"
+                  @click="emit('rejectAction', action.id)"
+                >
+                  <XCircle :size="16" />
+                  <span>{{ t('actions.reject') }}</span>
+                </button>
+
+                <div v-else class="action-finish-mark" :class="statusClass(action.status)">
+                  <CheckCircle2 v-if="action.status === 'executed'" :size="18" />
+                  <CircleOff v-else :size="18" />
+                  <span>{{ statusLabel(action.status) }}</span>
                 </div>
               </div>
-
-              <pre v-else-if="action.payload" class="minimal-pre action-payload">{{
-                JSON.stringify(action.payload, null, 2)
-              }}</pre>
-            </div>
-
-            <div class="action-card-actions">
-              <button
-                v-if="action.status === 'pending_confirmation' || action.status === 'queued'"
-                class="bento-btn primary"
-                type="button"
-                :disabled="isExecuting(action.id)"
-                @click="emit('executeAction', action.id)"
-              >
-                <Play :size="16" />
-                <span>{{
-                  isExecuting(action.id)
-                    ? t('actions.executing')
-                    : t('actions.execute')
-                }}</span>
-              </button>
-
-              <button
-                v-if="action.status === 'pending_confirmation' || action.status === 'queued'"
-                class="bento-btn"
-                type="button"
-                :disabled="isExecuting(action.id)"
-                @click="emit('rejectAction', action.id)"
-              >
-                <XCircle :size="16" />
-                <span>{{ t('actions.reject') }}</span>
-              </button>
-
-              <div v-else class="action-finish-mark" :class="statusClass(action.status)">
-                <CheckCircle2 v-if="action.status === 'executed'" :size="18" />
-                <CircleOff v-else :size="18" />
-                <span>{{ statusLabel(action.status) }}</span>
-              </div>
-            </div>
-          </article>
+            </article>
+          </div>
         </div>
-      </div>
-    </article>
+      </article>
 
-    <article class="bento-item bento-full adaptive-bento">
-      <div class="bento-header">
-        <div>
-          <h3>{{ t('actions.auditTitle') }}</h3>
-          <p class="settings-help-text">{{ t('actions.auditHint') }}</p>
-        </div>
-        <button
-          class="bento-btn icon-btn"
-          type="button"
-          :disabled="loading"
-          :aria-label="t('actions.refresh')"
-          :title="t('actions.refresh')"
-          @click="emit('refreshActions')"
-        >
-          <RefreshCw :size="18" />
-        </button>
-      </div>
-
-      <div class="bento-body">
-        <div v-if="loading" class="actions-empty">
-          {{ t('actions.loading') }}
-        </div>
-
-        <div v-else-if="!auditActions.length" class="actions-empty">
-          {{ t('actions.auditEmpty') }}
-        </div>
-
-        <div v-else class="actions-list">
-          <article
-            v-for="action in auditActions"
-            :key="`audit-${action.id}-${action.updatedAt || action.executedAt || action.createdAt}`"
-            class="action-card action-card-audit"
+      <article class="bento-item adaptive-bento actions-pane">
+        <div class="bento-header">
+          <div>
+            <h3>{{ t('actions.auditTitle') }}</h3>
+            <p class="settings-help-text">{{ t('actions.auditHint') }}</p>
+          </div>
+          <button
+            class="bento-btn icon-btn"
+            type="button"
+            :disabled="loading"
+            :aria-label="t('actions.refresh')"
+            :title="t('actions.refresh')"
+            @click="emit('refreshActions')"
           >
-            <div class="action-card-main">
-              <div class="action-card-top">
-                <div class="action-meta">
-                  <div class="action-icon">
-                    <Sparkles :size="18" />
+            <RefreshCw :size="18" />
+          </button>
+        </div>
+
+        <div class="bento-body">
+          <div v-if="loading" class="actions-empty">
+            {{ t('actions.loading') }}
+          </div>
+
+          <div v-else-if="!auditActions.length" class="actions-empty">
+            {{ t('actions.auditEmpty') }}
+          </div>
+
+          <div v-else class="actions-list">
+            <article
+              v-for="action in auditActions"
+              :key="`audit-${action.id}-${action.updatedAt || action.executedAt || action.createdAt}`"
+              class="action-card action-card-audit"
+            >
+              <div class="action-card-main">
+                <div class="action-card-top">
+                  <div class="action-meta">
+                    <div class="action-icon">
+                      <Sparkles :size="18" />
+                    </div>
+                    <div>
+                      <div class="action-title">{{ actionLabel(action) }}</div>
+                      <div class="action-subtitle">
+                        {{ actionTarget(action) }}
+                      </div>
+                    </div>
                   </div>
-                  <div>
-                    <div class="action-title">{{ actionLabel(action) }}</div>
-                    <div class="action-subtitle">
-                      {{ actionTarget(action) }}
+                  <div class="action-badges">
+                    <span class="status-pill compact" :class="statusClass(action.status)">
+                      <span class="status-dot"></span>
+                      {{ statusLabel(action.status) }}
+                    </span>
+                    <span class="action-source">
+                      {{ sourceLabel(action.source) }}
+                    </span>
+                    <span class="action-time">
+                      <Clock3 :size="14" />
+                      {{ actionTime(action).label }} {{ actionTime(action).value }}
+                    </span>
+                  </div>
+                </div>
+
+                <p class="action-reason">{{ action.reason }}</p>
+                <p v-if="action.statusReason" class="action-status-reason">
+                  {{ action.statusReason }}
+                </p>
+
+                <div
+                  v-if="createChannelPayload(action)"
+                  class="create-action-preview"
+                >
+                  <div class="create-action-key-row">
+                    <span>{{ t('actions.createPreview.apiKey') }}</span>
+                    <strong>{{ createChannelKeyState(action) }}</strong>
+                  </div>
+                  <div class="create-action-grid">
+                    <div
+                      v-for="field in createChannelFields(action)"
+                      :key="field.key"
+                      class="create-action-field"
+                    >
+                      <span>{{ field.label }}</span>
+                      <strong>{{ field.value }}</strong>
                     </div>
                   </div>
                 </div>
-                <div class="action-badges">
-                  <span class="status-pill compact" :class="statusClass(action.status)">
-                    <span class="status-dot"></span>
-                    {{ statusLabel(action.status) }}
-                  </span>
-                  <span class="action-source">
-                    {{ sourceLabel(action.source) }}
-                  </span>
-                  <span class="action-time">
-                    <Clock3 :size="14" />
-                    {{ actionTime(action).label }} {{ actionTime(action).value }}
-                  </span>
-                </div>
+
+                <pre v-else-if="action.payload" class="minimal-pre action-payload">{{
+                  JSON.stringify(action.payload, null, 2)
+                }}</pre>
               </div>
-
-              <p class="action-reason">{{ action.reason }}</p>
-              <p v-if="action.statusReason" class="action-status-reason">
-                {{ action.statusReason }}
-              </p>
-
-              <div
-                v-if="createChannelPayload(action)"
-                class="create-action-preview"
-              >
-                <div class="create-action-key-row">
-                  <span>{{ t('actions.createPreview.apiKey') }}</span>
-                  <strong>{{ createChannelKeyState(action) }}</strong>
-                </div>
-                <div class="create-action-grid">
-                  <div
-                    v-for="field in createChannelFields(action)"
-                    :key="field.key"
-                    class="create-action-field"
-                  >
-                    <span>{{ field.label }}</span>
-                    <strong>{{ field.value }}</strong>
-                  </div>
-                </div>
-              </div>
-
-              <pre v-else-if="action.payload" class="minimal-pre action-payload">{{
-                JSON.stringify(action.payload, null, 2)
-              }}</pre>
-            </div>
-          </article>
+            </article>
+          </div>
         </div>
-      </div>
-    </article>
+      </article>
+    </div>
   </div>
 </template>
