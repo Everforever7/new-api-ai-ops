@@ -1,5 +1,8 @@
 <script setup>
+import { ref } from 'vue'
 import {
+  ChevronDown,
+  ChevronRight,
   CheckCircle2,
   CircleOff,
   Clock3,
@@ -20,6 +23,7 @@ const props = defineProps({
 })
 
 const emit = defineEmits(['executeAction', 'rejectAction', 'refreshActions'])
+const expandedAuditIds = ref(new Set())
 
 function actionLabel(action) {
   return props.t(`actions.labels.${action.action}`)
@@ -105,6 +109,25 @@ function createChannelKeyState(action) {
   const payload = createChannelPayload(action)
   const key = payload?.channel?.key
   return key ? props.t('actions.createPreview.keyConfigured') : props.t('actions.createPreview.keyMissing')
+}
+
+function auditActionKey(action) {
+  return String(action.id || `${action.action}-${action.channelId}-${action.updatedAt || action.executedAt || action.createdAt}`)
+}
+
+function auditExpanded(action) {
+  return expandedAuditIds.value.has(auditActionKey(action))
+}
+
+function toggleAuditAction(action) {
+  const key = auditActionKey(action)
+  const next = new Set(expandedAuditIds.value)
+  if (next.has(key)) {
+    next.delete(key)
+  } else {
+    next.add(key)
+  }
+  expandedAuditIds.value = next
 }
 </script>
 
@@ -287,10 +310,25 @@ function createChannelKeyState(action) {
               v-for="action in auditActions"
               :key="`audit-${action.id}-${action.updatedAt || action.executedAt || action.createdAt}`"
               class="action-card action-card-audit"
+              :class="{ expanded: auditExpanded(action) }"
             >
-              <div class="action-card-main">
+              <div
+                class="action-card-main action-audit-summary"
+                role="button"
+                tabindex="0"
+                :aria-expanded="auditExpanded(action)"
+                :aria-label="auditExpanded(action) ? t('actions.collapseDetails') : t('actions.expandDetails')"
+                :title="auditExpanded(action) ? t('actions.collapseDetails') : t('actions.expandDetails')"
+                @click="toggleAuditAction(action)"
+                @keydown.enter.prevent="toggleAuditAction(action)"
+                @keydown.space.prevent="toggleAuditAction(action)"
+              >
                 <div class="action-card-top">
                   <div class="action-meta">
+                    <div class="action-expand-icon">
+                      <ChevronDown v-if="auditExpanded(action)" :size="18" />
+                      <ChevronRight v-else :size="18" />
+                    </div>
                     <div class="action-icon">
                       <Sparkles :size="18" />
                     </div>
@@ -315,7 +353,12 @@ function createChannelKeyState(action) {
                     </span>
                   </div>
                 </div>
+              </div>
 
+              <div
+                v-if="auditExpanded(action)"
+                class="action-card-main action-audit-details"
+              >
                 <p class="action-reason">{{ action.reason }}</p>
                 <p v-if="action.statusReason" class="action-status-reason">
                   {{ action.statusReason }}

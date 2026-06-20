@@ -945,13 +945,46 @@ th { font-weight: 600; color: var(--text-muted); font-size: 13px; }
 }
 
 .action-card-audit {
+  gap: 0;
+  padding: 0;
   background: var(--surface);
+  overflow: hidden;
 }
 
 .action-card-main {
   min-width: 0;
   display: grid;
   gap: 12px;
+}
+
+.action-audit-summary {
+  cursor: pointer;
+  padding: 14px;
+  transition: background 0.2s;
+}
+
+.action-audit-summary:hover {
+  background: var(--surface-hover);
+}
+
+.action-audit-summary:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: -2px;
+}
+
+.action-audit-details {
+  padding: 14px;
+  border-top: 1px solid var(--border);
+  background: var(--bg);
+}
+
+.action-expand-icon {
+  width: 26px;
+  height: 38px;
+  flex: 0 0 auto;
+  display: grid;
+  place-items: center;
+  color: var(--text-muted);
 }
 
 .action-card-top {
