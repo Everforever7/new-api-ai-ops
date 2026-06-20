@@ -34,6 +34,7 @@ const dictionaries = {
       runFailed: '手动检查失败',
       actionsLoadFailed: '动作队列加载失败',
       actionExecuteFailed: '动作执行失败',
+      actionTestCreateFailed: '创建后测试失败',
       actionRejectFailed: '动作拒绝失败',
       settingsLoadFailed: '设置加载失败',
       settingsSaveFailed: '设置保存失败',
@@ -164,6 +165,8 @@ const dictionaries = {
       collapseDetails: '收起详情',
       execute: '执行',
       executing: '执行中',
+      testCreate: '测试',
+      testingCreate: '测试中',
       reject: '拒绝',
       risk: {
         low: '低风险',
@@ -434,6 +437,7 @@ const dictionaries = {
       runFailed: 'Manual check failed',
       actionsLoadFailed: 'Failed to load actions',
       actionExecuteFailed: 'Failed to execute action',
+      actionTestCreateFailed: 'Failed to test created channel',
       actionRejectFailed: 'Failed to reject action',
       settingsLoadFailed: 'Failed to load settings',
       settingsSaveFailed: 'Failed to save settings',
@@ -564,6 +568,8 @@ const dictionaries = {
       collapseDetails: 'Collapse details',
       execute: 'Execute',
       executing: 'Executing',
+      testCreate: 'Test',
+      testingCreate: 'Testing',
       reject: 'Reject',
       risk: {
         low: 'Low risk',

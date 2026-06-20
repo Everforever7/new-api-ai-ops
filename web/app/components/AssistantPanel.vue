@@ -213,34 +213,6 @@ function memoryName(memory) {
           </section>
 
           <aside class="assistant-actions">
-            <div class="assistant-actions-title">
-              <Sparkles :size="18" />
-              <span>{{ t('assistant.memoryTitle') }}</span>
-            </div>
-
-            <div v-if="!memorySummary.length" class="assistant-action-empty">
-              {{ t('assistant.noMemory') }}
-            </div>
-
-            <div v-else class="assistant-memory-list">
-              <article
-                v-for="memory in memorySummary.slice(0, 5)"
-                :key="memory.channelId"
-                class="assistant-memory-item"
-              >
-                <div class="assistant-action-top">
-                  <strong>{{ memoryName(memory) }}</strong>
-                  <span class="status-pill compact" :class="memoryStatusClass(memory)">
-                    <span class="status-dot"></span>
-                    {{ memoryStatusLabel(memory) }}
-                  </span>
-                </div>
-                <p>{{ memory.manualNote || memory.aiObservation || t('assistant.noMemoryText') }}</p>
-                <div class="assistant-action-meta">
-                  <span>{{ memoryMeta(memory) }}</span>
-                </div>
-              </article>
-            </div>
 
             <div class="assistant-actions-title">
               <ClipboardList :size="18" />

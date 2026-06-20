@@ -6,6 +6,7 @@ import {
   CheckCircle2,
   CircleOff,
   Clock3,
+  FlaskConical,
   Play,
   RefreshCw,
   ShieldAlert,
@@ -22,7 +23,12 @@ const props = defineProps({
   t: { type: Function, required: true },
 })
 
-const emit = defineEmits(['executeAction', 'rejectAction', 'refreshActions'])
+const emit = defineEmits([
+  'executeAction',
+  'testCreateAction',
+  'rejectAction',
+  'refreshActions',
+])
 const expandedQueueIds = ref(new Set())
 const expandedAuditIds = ref(new Set())
 
@@ -45,6 +51,23 @@ function statusClass(status) {
 
 function sourceLabel(source) {
   return props.t(`actions.source.${source || 'unknown'}`)
+}
+
+function actionToneClass(action) {
+  if (action.source === 'report') return 'action-tone-report'
+  if (action.source === 'active_test') return 'action-tone-active-test'
+  if (action.source === 'assistant') {
+    return action.action === 'create_channel'
+      ? 'action-tone-create'
+      : 'action-tone-assistant'
+  }
+  if (action.action === 'test_channel') return 'action-tone-test'
+  if (action.action === 'disable_channel' || action.action === 'delete_channel') {
+    return 'action-tone-danger'
+  }
+  if (action.action === 'update_channel') return 'action-tone-update'
+  if (action.action === 'create_channel') return 'action-tone-create'
+  return 'action-tone-default'
 }
 
 function isExecuting(actionId) {
@@ -196,7 +219,10 @@ function toggleAuditAction(action) {
               v-for="action in actions"
               :key="action.id"
               class="action-card action-card-queue"
-              :class="{ expanded: queueExpanded(action) }"
+              :class="[
+                { expanded: queueExpanded(action) },
+                actionToneClass(action),
+              ]"
             >
               <div
                 class="action-card-main action-card-summary"
@@ -233,6 +259,9 @@ function toggleAuditAction(action) {
                     <span class="action-risk" :class="action.risk">
                       <ShieldAlert :size="14" />
                       {{ t(`actions.risk.${action.risk}`) }}
+                    </span>
+                    <span class="action-source">
+                      {{ sourceLabel(action.source) }}
                     </span>
                     <span class="action-time">
                       <Clock3 :size="14" />
@@ -277,6 +306,21 @@ function toggleAuditAction(action) {
               </div>
 
               <div class="action-card-actions">
+                <button
+                  v-if="action.action === 'create_channel' && (action.status === 'pending_confirmation' || action.status === 'queued')"
+                  class="bento-btn"
+                  type="button"
+                  :disabled="isExecuting(action.id)"
+                  @click="emit('testCreateAction', action.id)"
+                >
+                  <FlaskConical :size="16" />
+                  <span>{{
+                    isExecuting(action.id)
+                      ? t('actions.testingCreate')
+                      : t('actions.testCreate')
+                  }}</span>
+                </button>
+
                 <button
                   v-if="action.status === 'pending_confirmation' || action.status === 'queued'"
                   class="bento-btn primary"
@@ -346,7 +390,10 @@ function toggleAuditAction(action) {
               v-for="action in auditActions"
               :key="`audit-${action.id}-${action.updatedAt || action.executedAt || action.createdAt}`"
               class="action-card action-card-audit"
-              :class="{ expanded: auditExpanded(action) }"
+              :class="[
+                { expanded: auditExpanded(action) },
+                actionToneClass(action),
+              ]"
             >
               <div
                 class="action-card-main action-card-summary"

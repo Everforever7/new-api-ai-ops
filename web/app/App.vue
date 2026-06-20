@@ -29,6 +29,7 @@ import {
   saveSettings as requestSaveSettings,
   resetAssistantSession as requestResetAssistantSession,
   streamAssistantMessage as requestStreamAssistantMessage,
+  testCreateAction as requestTestCreateAction,
 } from './api.js'
 import { LANGUAGES, resolveLocale, translate } from './i18n.js'
 
@@ -703,6 +704,24 @@ async function executeAction(actionId) {
   }
 }
 
+async function testCreateAction(actionId) {
+  executingActionIds.value = [...new Set([...executingActionIds.value, actionId])]
+  try {
+    await requestTestCreateAction(actionId)
+    await Promise.allSettled([
+      getChannels().then((result) => {
+        channels.value = result
+      }),
+      loadChannelMemories(),
+      loadActions(),
+    ])
+  } catch (error) {
+    notifyError('errors.actionTestCreateFailed', error)
+  } finally {
+    executingActionIds.value = executingActionIds.value.filter((id) => id !== actionId)
+  }
+}
+
 async function rejectAction(actionId) {
   executingActionIds.value = [...new Set([...executingActionIds.value, actionId])]
   try {
@@ -889,6 +908,7 @@ onBeforeUnmount(() => {
           :formatDate="formatDate"
           :t="t"
           @executeAction="executeAction"
+          @testCreateAction="testCreateAction"
           @rejectAction="rejectAction"
           @refreshActions="loadActions"
         />

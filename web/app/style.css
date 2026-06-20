@@ -1036,12 +1036,16 @@ th { font-weight: 600; color: var(--text-muted); font-size: 13px; }
 }
 
 .action-card {
+  --action-tone: var(--primary);
+  --action-tone-bg: var(--primary-bg);
+  --action-tone-border: color-mix(in srgb, var(--action-tone) 34%, var(--border));
   display: grid;
   gap: 16px;
   padding: 18px;
   border: 1px solid var(--border);
   border-radius: 18px;
   background: var(--surface-hover);
+  box-shadow: inset 4px 0 0 var(--action-tone);
 }
 
 .action-card-queue,
@@ -1052,11 +1056,46 @@ th { font-weight: 600; color: var(--text-muted); font-size: 13px; }
 }
 
 .action-card-queue {
-  background: var(--surface-hover);
+  background: color-mix(in srgb, var(--surface-hover) 88%, var(--action-tone-bg) 12%);
 }
 
 .action-card-audit {
-  background: var(--surface);
+  background: color-mix(in srgb, var(--surface) 90%, var(--action-tone-bg) 10%);
+}
+
+.action-card.action-tone-report {
+  --action-tone: #0a84ff;
+  --action-tone-bg: rgba(10, 132, 255, 0.13);
+}
+
+.action-card.action-tone-assistant {
+  --action-tone: #af52de;
+  --action-tone-bg: rgba(175, 82, 222, 0.13);
+}
+
+.action-card.action-tone-active-test {
+  --action-tone: #30d158;
+  --action-tone-bg: rgba(48, 209, 88, 0.13);
+}
+
+.action-card.action-tone-create {
+  --action-tone: #64d2ff;
+  --action-tone-bg: rgba(100, 210, 255, 0.14);
+}
+
+.action-card.action-tone-test {
+  --action-tone: #5e5ce6;
+  --action-tone-bg: rgba(94, 92, 230, 0.13);
+}
+
+.action-card.action-tone-update {
+  --action-tone: #ff9f0a;
+  --action-tone-bg: rgba(255, 159, 10, 0.14);
+}
+
+.action-card.action-tone-danger {
+  --action-tone: #ff375f;
+  --action-tone-bg: rgba(255, 55, 95, 0.13);
 }
 
 .action-card-main {
@@ -1072,11 +1111,11 @@ th { font-weight: 600; color: var(--text-muted); font-size: 13px; }
 }
 
 .action-card-summary:hover {
-  background: var(--surface-hover);
+  background: color-mix(in srgb, var(--surface-hover) 78%, var(--action-tone-bg) 22%);
 }
 
 .action-card-summary:focus-visible {
-  outline: 2px solid var(--primary);
+  outline: 2px solid var(--action-tone);
   outline-offset: -2px;
 }
 
@@ -1124,8 +1163,8 @@ th { font-weight: 600; color: var(--text-muted); font-size: 13px; }
   display: grid;
   place-items: center;
   border-radius: 14px;
-  background: var(--primary-bg);
-  color: var(--primary);
+  background: var(--action-tone-bg);
+  color: var(--action-tone);
 }
 
 .action-title {
@@ -1184,8 +1223,8 @@ th { font-weight: 600; color: var(--text-muted); font-size: 13px; }
   min-height: 26px;
   padding: 0 10px;
   border-radius: 999px;
-  color: var(--text-muted);
-  background: var(--surface-hover);
+  color: var(--action-tone);
+  background: var(--action-tone-bg);
   font-size: 12px;
   font-weight: 800;
   white-space: nowrap;

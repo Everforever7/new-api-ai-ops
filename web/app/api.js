@@ -155,6 +155,13 @@ export function executeAction(actionId) {
   })
 }
 
+export function testCreateAction(actionId) {
+  return api(`/api/actions/${encodeURIComponent(actionId)}/test-create`, {
+    method: 'POST',
+    body: '{}',
+  })
+}
+
 export function rejectAction(actionId) {
   return api(`/api/actions/${encodeURIComponent(actionId)}/reject`, {
     method: 'POST',

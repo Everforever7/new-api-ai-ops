@@ -465,15 +465,17 @@ async function handleApi(
       return json(await runtime.sendAssistantMessage(body.message))
     }
 
-    const actionMatch = url.pathname.match(/^\/api\/actions\/([^/]+)\/(execute|reject)$/)
+    const actionMatch = url.pathname.match(/^\/api\/actions\/([^/]+)\/(execute|reject|test-create)$/)
     if (actionMatch && req.method === 'POST') {
       const [, actionId, actionVerb] = actionMatch
       const decodedActionId = decodeURIComponent(actionId)
-      return json(
-        actionVerb === 'execute'
-          ? await runtime.executeAction(decodedActionId)
-          : await runtime.rejectAction(decodedActionId)
-      )
+      if (actionVerb === 'execute') {
+        return json(await runtime.executeAction(decodedActionId))
+      }
+      if (actionVerb === 'test-create') {
+        return json(await runtime.testCreateAction(decodedActionId))
+      }
+      return json(await runtime.rejectAction(decodedActionId))
     }
 
     return jsonError('not found', 404)

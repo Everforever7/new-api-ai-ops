@@ -2,9 +2,10 @@ import { mkdirSync, readFileSync } from 'node:fs'
 import { writeFile } from 'node:fs/promises'
 import { dirname } from 'node:path'
 import type { AppConfig } from './config'
-import type { HealthSnapshot } from './types/domain'
+import type { Channel, HealthSnapshot } from './types/domain'
 import { generateOpsReport } from './ai/llm'
 import { collectHealthSnapshot } from './newapi/health'
+import { NewApiClient } from './newapi/client'
 import { sendDiscordReport } from './reporters/discord'
 import { pruneReports, saveReport } from './reporters/save'
 import { logger } from './logger'
@@ -13,6 +14,7 @@ import {
   buildAssistantActionDrafts,
   buildActionQueue,
   confirmAndExecuteAction,
+  createOpsAction,
   isOpenAction,
   rejectAction,
   sanitizeActionForClient,
@@ -35,6 +37,28 @@ import {
 const ACTION_QUEUE_PATH =
   process.env.AI_OPS_ACTION_QUEUE_PATH?.trim() || 'data/action-queue.json'
 const MAX_PERSISTED_ACTIONS = 300
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === 'object' && !Array.isArray(value)
+}
+
+function createdChannelName(action: OpsAction) {
+  const payload = action.payload
+  const channel = isRecord(payload?.channel) ? payload.channel : payload
+  const name =
+    isRecord(channel) && typeof channel.name === 'string'
+      ? channel.name.trim()
+      : ''
+  return name || action.channelName || action.target
+}
+
+function newestChannelByName(channels: Channel[], name: string) {
+  const normalized = name.trim()
+  if (!normalized) return undefined
+  return channels
+    .filter((channel) => channel.name?.trim() === normalized)
+    .sort((a, b) => Number(b.id || 0) - Number(a.id || 0))[0]
+}
 
 export type AssistantStreamOptions = {
   userMessageId?: string
@@ -250,7 +274,10 @@ export class OpsRuntime {
     await this.runChannelTests({ triggeredBy: 'report' })
   }
 
-  async runChannelTests(options: RunChannelTestsOptions = {}) {
+  async runChannelTests(
+    options: RunChannelTestsOptions = {},
+    behavior: { createActionDrafts?: boolean } = {}
+  ) {
     if (this.activeTestingRunning) {
       throw new Error('channel tests are already running')
     }
@@ -263,12 +290,15 @@ export class OpsRuntime {
       })
       const result = await runChannelTestsNow(this.config, options)
       const settings = await loadOpsSettings()
-      const drafts = await buildActiveTestActionDrafts(
-        this.config,
-        result.memories,
-        settings.activeTesting.failureThreshold,
-        settings.activeTesting.recoveryThreshold
-      )
+      const drafts =
+        behavior.createActionDrafts === false
+          ? []
+          : await buildActiveTestActionDrafts(
+              this.config,
+              result.memories,
+              settings.activeTesting.failureThreshold,
+              settings.activeTesting.recoveryThreshold
+            )
       const nextDrafts = drafts.filter((draft) => !this.hasOpenActionLike(draft))
       this.actions = [...nextDrafts, ...this.actions]
       await this.persistActions()
@@ -415,6 +445,89 @@ export class OpsRuntime {
     this.replaceAction(next)
     await this.persistActions()
     return sanitizeActionForClient(next)
+  }
+
+  async testCreateAction(actionId: string) {
+    const action = this.actions.find((item) => item.id === actionId)
+    if (!action) {
+      throw new Error(`action not found: ${actionId}`)
+    }
+    if (action.action !== 'create_channel') {
+      throw new Error('只有创建渠道动作可以执行创建后测试')
+    }
+    if (!isOpenAction(action)) {
+      throw new Error(`当前状态为 ${action.status}，不能测试`)
+    }
+
+    const created = await confirmAndExecuteAction(this.config, action)
+    this.replaceAction(created)
+    if (created.status !== 'executed') {
+      await this.persistActions()
+      return sanitizeActionForClient(created)
+    }
+
+    const name = createdChannelName(created)?.trim()
+    if (!name) {
+      logger.warn('skipping create action test; created channel name is missing')
+      await this.persistActions()
+      return sanitizeActionForClient(created)
+    }
+
+    try {
+      const client = new NewApiClient(this.config.newApi)
+      const channelData = await client.getChannels()
+      const channel = newestChannelByName(channelData.items, name)
+      if (!channel) {
+        logger.warn('skipping create action test; created channel was not found', {
+          channelName: name,
+        })
+        await this.persistActions()
+        return sanitizeActionForClient(created)
+      }
+
+      logger.info('testing newly created channel before enable', {
+        channelId: channel.id,
+        channelName: channel.name,
+      })
+      const testResult = await this.runChannelTests({
+        channelIds: [channel.id],
+        triggeredBy: 'action',
+      }, { createActionDrafts: false })
+      const run = testResult.runs.find((item) => item.channelId === channel.id)
+      const success = run?.status === 'success'
+      const enableAction = createOpsAction({
+        action: 'update_channel',
+        target: channel.name,
+        channel_id: channel.id,
+        channel_name: channel.name,
+        risk: success ? 'low' : 'medium',
+        requires_confirm: true,
+        reason: success
+          ? '渠道已创建且测试成功，点击执行将启用该渠道。'
+          : `渠道已创建但测试失败${run?.error ? `：${run.error}` : ''}。确认后仍可手动启用。`,
+        payload: { status: 1 },
+      }, 0, action.source || 'assistant')
+
+      const queuedEnableAction: OpsAction = {
+        ...enableAction,
+        status: 'pending_confirmation',
+        requiresConfirm: true,
+        statusReason: success
+          ? '创建后测试成功，等待确认启用'
+          : '创建后测试失败，渠道保持未启用',
+      }
+
+      this.actions = [
+        queuedEnableAction,
+        ...this.actions.filter((item) => item.id !== action.id),
+      ]
+      await this.persistActions()
+      return sanitizeActionForClient(queuedEnableAction)
+    } catch (error) {
+      logger.warn('failed to test create action', error)
+      await this.persistActions()
+      return sanitizeActionForClient(created)
+    }
   }
 
   async rejectAction(actionId: string) {
