@@ -226,7 +226,7 @@ services:
 | 变量 | 说明 | 默认值 |
 |------|------|--------|
 | `DISCORD_WEBHOOK_URL` | Discord Webhook 地址 | — |
-| `REPORT_INTERVAL_MINUTES` | 巡检间隔（分钟） | `15` |
+| `REPORT_INTERVAL_MINUTES` | 巡检间隔初始值（分钟，可在设置页调整） | `15` |
 | `REPORT_MIN_REQUESTS` | 最小请求数阈值 | `20` |
 | `REPORT_FAILURE_RATE_THRESHOLD` | 失败率告警阈值 | `0.3` |
 | `REPORT_TIMEZONE` | 报告时区 | `Asia/Hong_Kong` |

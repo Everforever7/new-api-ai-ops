@@ -1,8 +1,15 @@
 import type { AppConfig } from './config'
 import type { RawAction } from './actions'
-import { loadEffectiveLlmConfig, loadOpsSettings } from './settings'
+import { loadEffectiveLlmConfig, loadOpsSettings, type OpsSettings } from './settings'
 import { getChannelMemoryPromptSummary } from './testing'
-import type { ChannelMemoryPromptItem } from './types/domain'
+import { NewApiClient } from './newapi/client'
+import { logger } from './logger'
+import type {
+  Channel,
+  ChannelMemoryPromptItem,
+  LogStats,
+  UsageLog,
+} from './types/domain'
 
 export type AssistantMessage = {
   id: string
@@ -76,6 +83,8 @@ type AssistantPlan = {
 
 const MAX_HISTORY_MESSAGES = 12
 const MAX_MESSAGE_LENGTH = 6000
+const LOG_TYPE_CONSUME = 2
+const LOG_TYPE_ERROR = 5
 
 const CORE_ASSISTANT_SYSTEM_PROMPT = [
   '你是 new-api AI 运维助手，负责把自然语言整理成动作草稿。',
@@ -213,6 +222,9 @@ export async function planAssistantResponse(
   const llm = await loadEffectiveLlmConfig(config)
   const settings = await loadOpsSettings()
   const memorySummary = await getChannelMemoryPromptSummary()
+  const runtimeContext = llm.apiKey
+    ? await collectAssistantRuntimeContext(config, settings.prompt.assistantContext)
+    : undefined
   const planned = llm.apiKey
     ? (await planWithLlm(
         llm,
@@ -220,6 +232,7 @@ export async function planAssistantResponse(
         prepared.redactedInput,
         settings.prompt.assistantInstructions,
         memorySummary,
+        runtimeContext,
         options
       ).catch(() =>
         assistantUnavailablePlan()
@@ -252,13 +265,15 @@ async function planWithLlm(
   sanitizedInput: string,
   assistantInstructions: string,
   memorySummary: ChannelMemoryPromptItem[],
+  runtimeContext: Record<string, unknown> | undefined,
   options: AssistantResponseOptions = {}
 ): Promise<AssistantPlan | undefined> {
   const messages = buildChatMessages(
     history,
     sanitizedInput,
     assistantInstructions,
-    memorySummary
+    memorySummary,
+    runtimeContext
   )
 
   if (options.onReplyDelta) {
@@ -289,13 +304,22 @@ function buildChatMessages(
   history: AssistantMessage[],
   sanitizedInput: string,
   assistantInstructions: string,
-  memorySummary: ChannelMemoryPromptItem[]
+  memorySummary: ChannelMemoryPromptItem[],
+  runtimeContext: Record<string, unknown> | undefined
 ): ChatMessage[] {
   const memoryMessages: ChatMessage[] = memorySummary.length
     ? [
         {
           role: 'system',
           content: `渠道记忆摘要（人工备注优先级最高，不能覆盖，只能参考或建议更新）：\n${JSON.stringify(memorySummary, null, 2)}`,
+        },
+      ]
+    : []
+  const runtimeMessages: ChatMessage[] = runtimeContext
+    ? [
+        {
+          role: 'system',
+          content: `当前 new-api 实时上下文（来自管理 API，按设置页开关与数量上限裁剪；只能作为当前状态参考，动作仍需后端权限与确认策略校验）：\n${JSON.stringify(runtimeContext, null, 2)}`,
         },
       ]
     : []
@@ -306,12 +330,265 @@ function buildChatMessages(
       content: buildAssistantSystemPrompt(assistantInstructions),
     },
     ...memoryMessages,
+    ...runtimeMessages,
     ...history.slice(-MAX_HISTORY_MESSAGES).map((item) => ({
       role: item.role,
       content: item.content,
     })),
     { role: 'user', content: sanitizedInput },
   ]
+}
+
+async function collectAssistantRuntimeContext(
+  config: AppConfig,
+  options: OpsSettings['prompt']['assistantContext']
+) {
+  if (!options.enabled) return undefined
+
+  const end = Math.floor(Date.now() / 1000)
+  const start = end - Math.max(1, config.newApi.logHours) * 60 * 60
+  const needsChannels = options.includeChannelSummary || options.includeChannelDetails
+  const needsLogs =
+    options.includeRecentLogs || options.includeLogStats || options.includeModels
+  const needsStats = options.includeLogStats
+  const client = new NewApiClient(config.newApi)
+  const [channelResult, logResult, statsResult] = await Promise.allSettled([
+    needsChannels ? client.getChannels() : Promise.resolve(undefined),
+    needsLogs ? client.getRecentLogs(start, end) : Promise.resolve(undefined),
+    needsStats ? client.getLogStats(start, end) : Promise.resolve({} as LogStats),
+  ])
+
+  const context: Record<string, unknown> = {
+    generatedAt: new Date().toISOString(),
+    window: {
+      start: new Date(start * 1000).toISOString(),
+      end: new Date(end * 1000).toISOString(),
+      hours: config.newApi.logHours,
+    },
+  }
+
+  const channels =
+    channelResult.status === 'fulfilled' ? channelResult.value?.items || [] : []
+  const logs = logResult.status === 'fulfilled' ? logResult.value?.items || [] : []
+  const stats = statsResult.status === 'fulfilled' ? statsResult.value || {} : {}
+
+  if (channelResult.status === 'rejected') {
+    logger.warn('failed to load assistant channel context', channelResult.reason)
+    context.channelContextUnavailable = assistantContextErrorMessage(channelResult.reason)
+  }
+
+  if (logResult.status === 'rejected') {
+    logger.warn('failed to load assistant log context', logResult.reason)
+    context.logContextUnavailable = assistantContextErrorMessage(logResult.reason)
+  }
+
+  if (statsResult.status === 'rejected') {
+    logger.warn('failed to load assistant log stats context', statsResult.reason)
+    context.logStatsContextUnavailable = assistantContextErrorMessage(statsResult.reason)
+  }
+
+  if (options.includeChannelSummary && channelResult.status === 'fulfilled') {
+    context.channelSummary = buildAssistantChannelSummary(channels)
+  }
+
+  if (options.includeChannelDetails && channelResult.status === 'fulfilled') {
+    context.channels = {
+      total: channels.length,
+      returned: Math.min(channels.length, options.maxChannels),
+      truncated: channels.length > options.maxChannels,
+      items: channels
+        .slice()
+        .sort((a, b) => a.id - b.id)
+        .slice(0, options.maxChannels)
+        .map((channel) => summarizeChannelForAssistant(channel, options)),
+    }
+  }
+
+  if (options.includeLogStats && logResult.status === 'fulfilled') {
+    context.logSummary = buildAssistantLogSummary(logs, stats)
+  }
+
+  if (options.includeRecentLogs && logResult.status === 'fulfilled') {
+    context.recentLogs = {
+      totalFromApi:
+        logResult.status === 'fulfilled'
+          ? logResult.value?.total || logs.length
+          : logs.length,
+      returned: Math.min(logs.length, options.maxLogs),
+      truncated: logs.length > options.maxLogs,
+      items: logs.slice(0, options.maxLogs).map(summarizeLogForAssistant),
+    }
+  }
+
+  if (options.includeModels && logResult.status === 'fulfilled') {
+    context.topModels = buildTopModelsForAssistant(logs)
+  }
+
+  return context
+}
+
+function buildAssistantChannelSummary(channels: Channel[]) {
+  const statusCounts = new Map<number, number>()
+  const typeCounts = new Map<number, number>()
+  for (const channel of channels) {
+    statusCounts.set(channel.status, (statusCounts.get(channel.status) || 0) + 1)
+    typeCounts.set(channel.type, (typeCounts.get(channel.type) || 0) + 1)
+  }
+
+  return {
+    total: channels.length,
+    enabled: statusCounts.get(1) || 0,
+    manuallyDisabled: statusCounts.get(0) || 0,
+    autoDisabled: statusCounts.get(2) || 0,
+    statusCounts: Object.fromEntries(
+      [...statusCounts.entries()].map(([status, count]) => [
+        channelStatusLabel(status),
+        count,
+      ])
+    ),
+    typeCounts: Object.fromEntries(
+      [...typeCounts.entries()]
+        .sort((a, b) => a[0] - b[0])
+        .map(([type, count]) => [String(type), count])
+    ),
+  }
+}
+
+function summarizeChannelForAssistant(
+  channel: Channel,
+  options: OpsSettings['prompt']['assistantContext']
+) {
+  return {
+    id: channel.id,
+    name: channel.name,
+    type: channel.type,
+    status: channel.status,
+    statusLabel: channelStatusLabel(channel.status),
+    group: channel.group,
+    tag: channel.tag,
+    models: channel.models,
+    baseUrl: channel.base_url,
+    priority: channel.priority,
+    weight: channel.weight,
+    autoBan: channel.auto_ban,
+    ...(options.includeLatency
+      ? {
+          responseTimeMs: numericOrUndefined(channel.response_time),
+          testTime: channel.test_time,
+        }
+      : {}),
+    ...(options.includeBalance
+      ? {
+          balance: numericOrUndefined(channel.balance),
+          usedQuota: numericOrUndefined(channel.used_quota),
+          balanceUpdatedTime: channel.balance_updated_time,
+        }
+      : {}),
+  }
+}
+
+function buildAssistantLogSummary(logs: UsageLog[], stats: LogStats) {
+  const success = logs.filter((log) => log.type === LOG_TYPE_CONSUME).length
+  const errors = logs.filter((log) => log.type === LOG_TYPE_ERROR).length
+  const effective = success + errors
+
+  return {
+    observed: logs.length,
+    success,
+    errors,
+    failureRate: effective ? errors / effective : 0,
+    rpm: stats.rpm,
+    tpm: stats.tpm,
+    quota: stats.quota,
+    topErrorChannels: buildTopErrorChannelsForAssistant(logs),
+  }
+}
+
+function summarizeLogForAssistant(log: UsageLog) {
+  return {
+    id: log.id,
+    createdAt: log.created_at
+      ? new Date(log.created_at * 1000).toISOString()
+      : undefined,
+    type: log.type,
+    typeLabel: logTypeLabel(log.type),
+    channelId: log.channel,
+    channelName: log.channel_name,
+    model: log.model_name,
+    group: log.group,
+    quota: log.quota,
+    promptTokens: log.prompt_tokens,
+    completionTokens: log.completion_tokens,
+    latencyMs: log.use_time,
+    isStream: log.is_stream,
+    content: cleanAssistantContextText(log.content, 300),
+  }
+}
+
+function buildTopErrorChannelsForAssistant(logs: UsageLog[]) {
+  const grouped = new Map<string, { channelId?: number; channelName?: string | null; count: number; sample?: string }>()
+  for (const log of logs.filter((item) => item.type === LOG_TYPE_ERROR)) {
+    const key = String(log.channel || log.channel_name || 'unknown')
+    const item = grouped.get(key) || {
+      channelId: log.channel,
+      channelName: log.channel_name,
+      count: 0,
+      sample: undefined,
+    }
+    item.count += 1
+    item.sample ||= cleanAssistantContextText(log.content, 180)
+    grouped.set(key, item)
+  }
+
+  return [...grouped.values()].sort((a, b) => b.count - a.count).slice(0, 10)
+}
+
+function buildTopModelsForAssistant(logs: UsageLog[]) {
+  const grouped = new Map<string, { model: string; count: number; errors: number }>()
+  for (const log of logs) {
+    const model = log.model_name?.trim() || 'unknown'
+    const item = grouped.get(model) || { model, count: 0, errors: 0 }
+    item.count += 1
+    if (log.type === LOG_TYPE_ERROR) item.errors += 1
+    grouped.set(model, item)
+  }
+
+  return [...grouped.values()].sort((a, b) => b.count - a.count).slice(0, 15)
+}
+
+function cleanAssistantContextText(value: unknown, maxLength: number) {
+  if (value === undefined || value === null) return undefined
+  return String(value)
+    .trim()
+    .replace(/\bBearer\s+[A-Za-z0-9._~+/=-]+/gi, 'Bearer [REDACTED]')
+    .replace(/\b(?:sk|rk|pk)-[A-Za-z0-9][A-Za-z0-9._-]{12,}\b/g, '[REDACTED]')
+    .replace(
+      /\b[A-Za-z0-9_-]{16,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\b/g,
+      '[REDACTED]'
+    )
+    .slice(0, maxLength)
+}
+
+function assistantContextErrorMessage(error: unknown) {
+  return error instanceof Error ? error.message : String(error)
+}
+
+function numericOrUndefined(value: unknown) {
+  const number = Number(value)
+  return Number.isFinite(number) ? number : undefined
+}
+
+function channelStatusLabel(status: number) {
+  if (status === 1) return 'enabled'
+  if (status === 2) return 'auto_disabled'
+  if (status === 0) return 'disabled'
+  return String(status)
+}
+
+function logTypeLabel(type: number) {
+  if (type === LOG_TYPE_CONSUME) return 'consume'
+  if (type === LOG_TYPE_ERROR) return 'error'
+  return String(type)
 }
 
 async function planWithLlmStream(

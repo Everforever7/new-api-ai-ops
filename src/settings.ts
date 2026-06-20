@@ -20,6 +20,21 @@ export type OpsSettings = {
     includeBalance: boolean
     customInstructions: string
     assistantInstructions: string
+    assistantContext: {
+      enabled: boolean
+      includeChannelSummary: boolean
+      includeChannelDetails: boolean
+      includeRecentLogs: boolean
+      includeLogStats: boolean
+      includeModels: boolean
+      includeLatency: boolean
+      includeBalance: boolean
+      maxChannels: number
+      maxLogs: number
+    }
+  }
+  report: {
+    intervalMinutes: number
   }
   aiExecution: {
     enabled: boolean
@@ -102,6 +117,21 @@ const DEFAULT_SETTINGS: OpsSettings = {
       '如果用户分多轮补充信息，你可以结合最近对话上下文生成完整动作；例如上一轮已有 [API_KEY_1] 和 base_url，本轮只补模型时，可以使用 [API_KEY_1]。',
       '回复中要提醒用户到动作队列查看后端策略给出的最终状态。',
     ].join('\n'),
+    assistantContext: {
+      enabled: true,
+      includeChannelSummary: true,
+      includeChannelDetails: true,
+      includeRecentLogs: true,
+      includeLogStats: true,
+      includeModels: true,
+      includeLatency: true,
+      includeBalance: false,
+      maxChannels: 80,
+      maxLogs: 50,
+    },
+  },
+  report: {
+    intervalMinutes: 15,
   },
   aiExecution: {
     enabled: true,
@@ -272,12 +302,14 @@ export function normalizeOpsSettings(
   const llm = readRecord(root, 'llm')
   const aiExecution = readRecord(root, 'aiExecution')
   const prompt = readRecord(root, 'prompt')
+  const report = readRecord(root, 'report')
   const permissions = readRecord(aiExecution, 'permissions')
   const confirmation = readRecord(aiExecution, 'confirmation')
   const safety = readRecord(aiExecution, 'safety')
   const protectedChannels = readRecord(aiExecution, 'protectedChannels')
   const activeTesting = readRecord(root, 'activeTesting')
   const storage = readRecord(root, 'storage')
+  const assistantContext = readRecord(prompt, 'assistantContext')
 
   const nextApiKey = readText(llm, 'apiKey', '', 20_000)
   const clearApiKey = readBoolean(llm, 'clearApiKey', false)
@@ -339,6 +371,71 @@ export function normalizeOpsSettings(
         'assistantInstructions',
         defaults.prompt.assistantInstructions,
         12_000
+      ),
+      assistantContext: {
+        enabled: readBoolean(
+          assistantContext,
+          'enabled',
+          defaults.prompt.assistantContext.enabled
+        ),
+        includeChannelSummary: readBoolean(
+          assistantContext,
+          'includeChannelSummary',
+          defaults.prompt.assistantContext.includeChannelSummary
+        ),
+        includeChannelDetails: readBoolean(
+          assistantContext,
+          'includeChannelDetails',
+          defaults.prompt.assistantContext.includeChannelDetails
+        ),
+        includeRecentLogs: readBoolean(
+          assistantContext,
+          'includeRecentLogs',
+          defaults.prompt.assistantContext.includeRecentLogs
+        ),
+        includeLogStats: readBoolean(
+          assistantContext,
+          'includeLogStats',
+          defaults.prompt.assistantContext.includeLogStats
+        ),
+        includeModels: readBoolean(
+          assistantContext,
+          'includeModels',
+          defaults.prompt.assistantContext.includeModels
+        ),
+        includeLatency: readBoolean(
+          assistantContext,
+          'includeLatency',
+          defaults.prompt.assistantContext.includeLatency
+        ),
+        includeBalance: readBoolean(
+          assistantContext,
+          'includeBalance',
+          defaults.prompt.assistantContext.includeBalance
+        ),
+        maxChannels: readNumber(
+          assistantContext,
+          'maxChannels',
+          defaults.prompt.assistantContext.maxChannels,
+          1,
+          1000
+        ),
+        maxLogs: readNumber(
+          assistantContext,
+          'maxLogs',
+          defaults.prompt.assistantContext.maxLogs,
+          1,
+          500
+        ),
+      },
+    },
+    report: {
+      intervalMinutes: readNumber(
+        report,
+        'intervalMinutes',
+        defaults.report.intervalMinutes,
+        1,
+        10_080
       ),
     },
     aiExecution: {

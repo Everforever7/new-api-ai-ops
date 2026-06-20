@@ -7,6 +7,7 @@ import { OpsRuntime } from '../runtime'
 import { logger } from '../logger'
 import {
   loadEffectiveLlmConfig,
+  loadOpsSettings,
   loadPublicOpsSettings,
   savePublicOpsSettings,
 } from '../settings'
@@ -247,6 +248,7 @@ async function handleApi(
   try {
     if (url.pathname === '/api/status' && req.method === 'GET') {
       const llmConfig = await loadEffectiveLlmConfig(config)
+      const settings = await loadOpsSettings()
       return json({
         ...runtime.getState(),
         config: {
@@ -255,7 +257,7 @@ async function handleApi(
           llmModel: llmConfig.model,
           hasLlmApiKey: Boolean(llmConfig.apiKey),
           hasDiscordWebhook: Boolean(config.discord.webhookUrl),
-          reportIntervalMinutes: config.report.intervalMinutes,
+          reportIntervalMinutes: settings.report.intervalMinutes,
         },
       })
     }
@@ -289,6 +291,7 @@ async function handleApi(
         pruneReports(config.report.saveDir, saved.storage.maxReports),
         pruneActionAudit(saved.storage.maxActionAuditEntries),
       ])
+      await runtime.refreshReportScheduler()
       await runtime.refreshActiveTestingScheduler()
       return json(saved)
     }

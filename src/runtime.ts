@@ -89,6 +89,10 @@ function isActionLike(value: unknown): value is OpsAction {
 
 export class OpsRuntime {
   private running = false
+  private reportSchedulerActive = false
+  private reportSchedulerTimer?: ReturnType<typeof setInterval>
+  private reportSchedulerOptions: RunReportOptions = {}
+  private reportScheduleKey = ''
   private activeTestingRunning = false
   private activeTestingTimer?: ReturnType<typeof setInterval>
   private activeTestingScheduleKey = ''
@@ -146,6 +150,49 @@ export class OpsRuntime {
     this.assistantLastMemorySummary = []
     this.assistantUpdatedAt = new Date().toISOString()
     return this.getAssistantSession()
+  }
+
+  async startReportScheduler(options: RunReportOptions = {}) {
+    this.reportSchedulerActive = true
+    this.reportSchedulerOptions = options
+    await this.runScheduledReport()
+    await this.refreshReportScheduler()
+  }
+
+  async refreshReportScheduler() {
+    if (!this.reportSchedulerActive) return
+
+    const settings = await loadOpsSettings()
+    const intervalMinutes = Math.max(1, settings.report.intervalMinutes)
+    const scheduleKey = JSON.stringify({
+      intervalMinutes,
+      dryRun: this.reportSchedulerOptions.dryRun === true,
+    })
+    if (scheduleKey === this.reportScheduleKey) return
+
+    if (this.reportSchedulerTimer) {
+      clearInterval(this.reportSchedulerTimer)
+      this.reportSchedulerTimer = undefined
+    }
+
+    this.reportScheduleKey = scheduleKey
+    const intervalMs = intervalMinutes * 60 * 1000
+    this.reportSchedulerTimer = setInterval(() => {
+      void this.runScheduledReport()
+    }, intervalMs)
+    logger.info(`scheduler started; interval=${intervalMinutes}m`)
+  }
+
+  private async runScheduledReport() {
+    try {
+      await this.runReport({
+        dryRun: this.reportSchedulerOptions.dryRun,
+        sendDiscord: this.reportSchedulerOptions.sendDiscord,
+        printReport: this.reportSchedulerOptions.printReport,
+      })
+    } catch (error) {
+      logger.error('scheduled run failed', error)
+    }
   }
 
   async refreshActiveTestingScheduler() {

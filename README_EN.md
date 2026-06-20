@@ -226,7 +226,7 @@ services:
 | Variable | Description | Default |
 |----------|-------------|---------|
 | `DISCORD_WEBHOOK_URL` | Discord Webhook URL | — |
-| `REPORT_INTERVAL_MINUTES` | Inspection interval (minutes) | `15` |
+| `REPORT_INTERVAL_MINUTES` | Initial inspection interval (minutes, adjustable in Settings) | `15` |
 | `REPORT_MIN_REQUESTS` | Minimum request count threshold | `20` |
 | `REPORT_FAILURE_RATE_THRESHOLD` | Failure rate alert threshold | `0.3` |
 | `REPORT_TIMEZONE` | Report timezone | `Asia/Hong_Kong` |

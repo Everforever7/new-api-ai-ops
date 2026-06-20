@@ -7,12 +7,14 @@ import {
   Check,
   Database,
   Edit3,
+  FileText,
   FlaskConical,
   Gauge,
   KeyRound,
   ListChecks,
   Lock,
   PlusCircle,
+  Radio,
   RefreshCw,
   Save,
   ShieldCheck,
@@ -107,6 +109,51 @@ const promptRows = computed(() => [
   },
 ])
 
+const assistantContextRows = computed(() => [
+  {
+    key: 'includeChannelSummary',
+    icon: ListChecks,
+    title: props.t('settings.prompt.assistantContext.parts.channelSummary'),
+    hint: props.t('settings.prompt.assistantContext.hints.channelSummary'),
+  },
+  {
+    key: 'includeChannelDetails',
+    icon: Radio,
+    title: props.t('settings.prompt.assistantContext.parts.channelDetails'),
+    hint: props.t('settings.prompt.assistantContext.hints.channelDetails'),
+  },
+  {
+    key: 'includeRecentLogs',
+    icon: Activity,
+    title: props.t('settings.prompt.assistantContext.parts.recentLogs'),
+    hint: props.t('settings.prompt.assistantContext.hints.recentLogs'),
+  },
+  {
+    key: 'includeLogStats',
+    icon: BarChart3,
+    title: props.t('settings.prompt.assistantContext.parts.logStats'),
+    hint: props.t('settings.prompt.assistantContext.hints.logStats'),
+  },
+  {
+    key: 'includeModels',
+    icon: Brain,
+    title: props.t('settings.prompt.assistantContext.parts.models'),
+    hint: props.t('settings.prompt.assistantContext.hints.models'),
+  },
+  {
+    key: 'includeLatency',
+    icon: Gauge,
+    title: props.t('settings.prompt.assistantContext.parts.latency'),
+    hint: props.t('settings.prompt.assistantContext.hints.latency'),
+  },
+  {
+    key: 'includeBalance',
+    icon: WalletCards,
+    title: props.t('settings.prompt.assistantContext.parts.balance'),
+    hint: props.t('settings.prompt.assistantContext.hints.balance'),
+  },
+])
+
 const confirmationOptions = computed(() => [
   { value: 'auto', label: props.t('settings.confirmation.auto') },
   { value: 'confirm', label: props.t('settings.confirmation.confirm') },
@@ -138,6 +185,11 @@ const settingsTabs = computed(() => [
     id: 'activeTesting',
     icon: FlaskConical,
     label: props.t('settings.activeTesting.title'),
+  },
+  {
+    id: 'report',
+    icon: FileText,
+    label: props.t('settings.report.title'),
   },
   {
     id: 'storage',
@@ -445,6 +497,10 @@ function logout() {
             class="settings-stack"
             role="tabpanel"
           >
+            <div class="settings-section-title">
+              <ListChecks :size="18" />
+              <span>{{ t('settings.prompt.reportContextTitle') }}</span>
+            </div>
             <div class="bento-table-wrap">
               <table class="settings-table">
                 <thead>
@@ -487,6 +543,95 @@ function logout() {
                   </tr>
                 </tbody>
               </table>
+            </div>
+
+            <div class="settings-section">
+              <div class="settings-control-row">
+                <div class="settings-inline-main">
+                  <div class="bento-label">{{ t('settings.prompt.assistantContext.title') }}</div>
+                  <div class="bento-sub">{{ t('settings.prompt.assistantContext.hint') }}</div>
+                </div>
+                <button
+                  class="setting-switch"
+                  :class="{ active: settingValue('prompt.assistantContext.enabled') }"
+                  type="button"
+                  :aria-pressed="settingValue('prompt.assistantContext.enabled')"
+                  @click="update('prompt.assistantContext.enabled', !settingValue('prompt.assistantContext.enabled'))"
+                >
+                  {{
+                    settingValue('prompt.assistantContext.enabled')
+                      ? t('settings.on')
+                      : t('settings.off')
+                  }}
+                </button>
+              </div>
+
+              <div class="bento-table-wrap">
+                <table class="settings-table">
+                  <thead>
+                    <tr>
+                      <th>{{ t('settings.prompt.part') }}</th>
+                      <th>{{ t('settings.prompt.include') }}</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr v-for="row in assistantContextRows" :key="row.key">
+                      <td>
+                        <div class="permission-name prompt-name">
+                          <component :is="row.icon" :size="18" />
+                          <span>
+                            <strong>{{ row.title }}</strong>
+                            <small>{{ row.hint }}</small>
+                          </span>
+                        </div>
+                      </td>
+                      <td>
+                        <button
+                          class="setting-switch small"
+                          :class="{ active: settingValue(`prompt.assistantContext.${row.key}`) }"
+                          type="button"
+                          :aria-pressed="settingValue(`prompt.assistantContext.${row.key}`)"
+                          @click="
+                            update(
+                              `prompt.assistantContext.${row.key}`,
+                              !settingValue(`prompt.assistantContext.${row.key}`)
+                            )
+                          "
+                        >
+                          {{
+                            settingValue(`prompt.assistantContext.${row.key}`)
+                              ? t('settings.on')
+                              : t('settings.off')
+                          }}
+                        </button>
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+
+              <div class="settings-number-grid active-testing-grid">
+                <label class="settings-field">
+                  <span>{{ t('settings.prompt.assistantContext.maxChannels') }}</span>
+                  <input
+                    type="number"
+                    min="1"
+                    :value="settingValue('prompt.assistantContext.maxChannels')"
+                    @input="update('prompt.assistantContext.maxChannels', Number($event.target.value))"
+                  />
+                  <small>{{ t('settings.prompt.assistantContext.maxChannelsHint') }}</small>
+                </label>
+                <label class="settings-field">
+                  <span>{{ t('settings.prompt.assistantContext.maxLogs') }}</span>
+                  <input
+                    type="number"
+                    min="1"
+                    :value="settingValue('prompt.assistantContext.maxLogs')"
+                    @input="update('prompt.assistantContext.maxLogs', Number($event.target.value))"
+                  />
+                  <small>{{ t('settings.prompt.assistantContext.maxLogsHint') }}</small>
+                </label>
+              </div>
             </div>
 
             <div class="prompt-editor-launches">
@@ -598,6 +743,31 @@ function logout() {
           </div>
 
           <div
+            v-else-if="activeSettingsTab === 'report'"
+            class="settings-stack"
+            role="tabpanel"
+          >
+            <div class="settings-section">
+              <div class="settings-section-title">
+                <FileText :size="18" />
+                <span>{{ t('settings.report.scheduleTitle') }}</span>
+              </div>
+              <div class="settings-number-grid active-testing-grid">
+                <label class="settings-field">
+                  <span>{{ t('settings.report.intervalMinutes') }}</span>
+                  <input
+                    type="number"
+                    min="1"
+                    :value="settingValue('report.intervalMinutes')"
+                    @input="update('report.intervalMinutes', Number($event.target.value))"
+                  />
+                  <small>{{ t('settings.report.intervalHint') }}</small>
+                </label>
+              </div>
+            </div>
+          </div>
+
+          <div
             v-else-if="activeSettingsTab === 'llm'"
             class="settings-stack"
             role="tabpanel"
@@ -640,12 +810,8 @@ function logout() {
                       <RefreshCw :size="18" />
                     </button>
                   </div>
-                  <small v-if="llmModelsLoading || !llmModels.length">
-                    {{
-                      llmModelsLoading
-                        ? t('settings.llm.fetchingModels')
-                        : t('settings.llm.modelHint')
-                    }}
+                  <small v-if="llmModelsLoading">
+                    {{ t('settings.llm.fetchingModels') }}
                   </small>
                 </label>
               </div>
