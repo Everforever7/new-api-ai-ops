@@ -508,6 +508,47 @@ export async function pruneActionAudit(maxEntries: number) {
   }
 }
 
+function parseAuditLine(line: string) {
+  try {
+    const parsed = JSON.parse(line) as unknown
+    if (!isRecord(parsed)) return undefined
+    if (typeof parsed.id !== 'string') return undefined
+    if (typeof parsed.action !== 'string') return undefined
+    if (typeof parsed.status !== 'string') return undefined
+    return parsed as OpsAction
+  } catch {
+    return undefined
+  }
+}
+
+function actionAuditTime(action: OpsAction) {
+  const candidates = [action.executedAt, action.updatedAt, action.createdAt]
+  for (const value of candidates) {
+    const timestamp = Date.parse(String(value || ''))
+    if (Number.isFinite(timestamp)) return timestamp
+  }
+  return 0
+}
+
+export async function listActionAudit(options: { limit?: number } = {}) {
+  const limit = Math.min(Math.max(Number(options.limit || 100), 1), 1000)
+  try {
+    const raw = await readFile(AUDIT_PATH, 'utf8')
+    return raw
+      .trim()
+      .split('\n')
+      .filter(Boolean)
+      .slice(-limit)
+      .map(parseAuditLine)
+      .filter((item): item is OpsAction => Boolean(item))
+      .sort((a, b) => actionAuditTime(b) - actionAuditTime(a))
+      .map(sanitizeActionForClient)
+  } catch (error) {
+    if ((error as { code?: string }).code === 'ENOENT') return []
+    throw error
+  }
+}
+
 async function coolingDown(action: OpsAction, settings: OpsSettings) {
   if (!action.channelId || settings.aiExecution.safety.channelCooldownMinutes <= 0) {
     return false

@@ -13,6 +13,7 @@ import {
   clearStoredAuth,
   executeAction as requestExecuteAction,
   fetchLlmModels as requestFetchLlmModels,
+  getActionAudit,
   getAssistantSession,
   getChannelMemories,
   getChannelTestHistory as requestGetChannelTestHistory,
@@ -58,6 +59,7 @@ const channels = ref([])
 const channelMemories = ref([])
 const settings = ref(null)
 const actions = ref([])
+const actionAudit = ref([])
 const errorToasts = ref([])
 const refreshing = ref(false)
 const runningCheck = ref(false)
@@ -469,11 +471,24 @@ async function loadSettings() {
 async function loadActions() {
   actionsLoading.value = true
   try {
-    actions.value = await getActions()
+    const [queue, audit] = await Promise.all([
+      getActions(),
+      getActionAudit({ limit: 100 }),
+    ])
+    actions.value = queue
+    actionAudit.value = audit
   } catch (error) {
     notifyError('errors.actionsLoadFailed', error)
   } finally {
     actionsLoading.value = false
+  }
+}
+
+async function refreshActionAudit() {
+  try {
+    actionAudit.value = await getActionAudit({ limit: 100 })
+  } catch {
+    // Keep the current queue interaction quiet if the audit refresh races the backend.
   }
 }
 
@@ -668,6 +683,7 @@ async function executeAction(actionId) {
     actions.value = actions.value.map((action) =>
       action.id === updated.id ? updated : action
     )
+    await refreshActionAudit()
   } catch (error) {
     notifyError('errors.actionExecuteFailed', error)
   } finally {
@@ -682,6 +698,7 @@ async function rejectAction(actionId) {
     actions.value = actions.value.map((action) =>
       action.id === updated.id ? updated : action
     )
+    await refreshActionAudit()
   } catch (error) {
     notifyError('errors.actionRejectFailed', error)
   } finally {
@@ -853,6 +870,7 @@ onBeforeUnmount(() => {
           v-else-if="activeTab === 'actions'"
           key="actions"
           :actions="actions"
+          :auditActions="actionAudit"
           :loading="actionsLoading"
           :executingActionIds="executingActionIds"
           :formatDate="formatDate"

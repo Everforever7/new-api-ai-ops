@@ -18,7 +18,7 @@ import {
   savePublicOpsSettings,
 } from '../settings'
 import { pruneReports } from '../reporters/save'
-import { pruneActionAudit } from '../actions'
+import { listActionAudit, pruneActionAudit } from '../actions'
 import {
   getChannelMemory,
   getChannelTestHistory,
@@ -320,6 +320,15 @@ async function handleApi(
 
     if (url.pathname === '/api/actions' && req.method === 'GET') {
       return json(runtime.getActions())
+    }
+
+    if (url.pathname === '/api/actions/audit' && req.method === 'GET') {
+      const limit = Number(url.searchParams.get('limit') || '')
+      return json(
+        await listActionAudit({
+          limit: Number.isInteger(limit) && limit > 0 ? limit : undefined,
+        })
+      )
     }
 
     if (url.pathname === '/api/tests/run' && req.method === 'POST') {

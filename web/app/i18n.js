@@ -150,6 +150,10 @@ const dictionaries = {
     actions: {
       title: 'AI 动作执行',
       queueTitle: '待处理动作',
+      queueHint: '当前仍在队列里的动作，可执行或拒绝。',
+      auditTitle: '执行记录',
+      auditHint: '来自 action-audit.jsonl，记录已执行、失败和已拒绝的动作。',
+      auditEmpty: '暂无执行记录',
       loading: '正在加载动作',
       empty: '当前没有动作',
       noTarget: '未指定目标',
@@ -181,9 +185,15 @@ const dictionaries = {
         test_channel: '测试渠道',
         notify_low_balance: '低余额提醒',
         create_channel: '创建渠道',
-        update_channel: '修改渠道',
+        update_channel: '开启/修改渠道',
         disable_channel: '禁用渠道',
         delete_channel: '删除渠道',
+      },
+      source: {
+        report: '巡检报告',
+        assistant: 'AI 助手',
+        active_test: '主动测试',
+        unknown: '未知来源',
       },
       createPreview: {
         apiKey: 'API Key',
@@ -321,7 +331,7 @@ const dictionaries = {
         assistantPlaceholder: '例如：创建渠道时默认分组 default；模型名按用户输入原样保留；用户只补充一部分信息时先追问，不要编造。',
         editReportPrompt: '编辑报告提示词',
         editAssistantPrompt: '编辑 AI 助手提示词',
-        coreSafetyHint: '核心安全规则由后端固定：不泄露密钥、不生成删除动作、只输出 JSON、不能声称已执行。',
+        coreSafetyHint: '核心安全规则由后端固定：不泄露密钥、删除只生成草案、只输出 JSON、不能声称已执行。',
       },
       context: {
         title: '上下文数据源',
@@ -518,6 +528,10 @@ const dictionaries = {
     actions: {
       title: 'AI Action Execution',
       queueTitle: 'Action queue',
+      queueHint: 'Actions currently in the queue; execute or reject them here.',
+      auditTitle: 'Execution records',
+      auditHint: 'Loaded from action-audit.jsonl; records executed, failed, and rejected actions.',
+      auditEmpty: 'No execution records yet',
       loading: 'Loading actions',
       empty: 'No actions right now',
       noTarget: 'No target',
@@ -549,9 +563,15 @@ const dictionaries = {
         test_channel: 'Test channel',
         notify_low_balance: 'Low balance notice',
         create_channel: 'Create channel',
-        update_channel: 'Update channel',
+        update_channel: 'Enable/update channel',
         disable_channel: 'Disable channel',
         delete_channel: 'Delete channel',
+      },
+      source: {
+        report: 'Inspection report',
+        assistant: 'AI assistant',
+        active_test: 'Active testing',
+        unknown: 'Unknown source',
       },
       createPreview: {
         apiKey: 'API key',
@@ -689,7 +709,7 @@ const dictionaries = {
         assistantPlaceholder: 'Example: use default group default, keep model names exactly as entered, ask follow-up questions when fields are missing.',
         editReportPrompt: 'Edit report prompt',
         editAssistantPrompt: 'Edit AI assistant prompt',
-        coreSafetyHint: 'Core safety rules are fixed on the backend: do not leak secrets, never generate delete actions, output JSON only, and never claim execution.',
+        coreSafetyHint: 'Core safety rules are fixed on the backend: do not leak secrets, deletion is draft-only, output JSON only, and never claim execution.',
       },
       context: {
         title: 'Context Sources',

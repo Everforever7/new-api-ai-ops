@@ -924,6 +924,10 @@ th { font-weight: 600; color: var(--text-muted); font-size: 13px; }
   background: var(--surface-hover);
 }
 
+.action-card-audit {
+  background: var(--surface);
+}
+
 .action-card-main {
   min-width: 0;
   display: grid;
@@ -1002,6 +1006,19 @@ th { font-weight: 600; color: var(--text-muted); font-size: 13px; }
   background: var(--surface);
   font-size: 12px;
   font-weight: 700;
+  white-space: nowrap;
+}
+
+.action-source {
+  display: inline-flex;
+  align-items: center;
+  min-height: 26px;
+  padding: 0 10px;
+  border-radius: 999px;
+  color: var(--text-muted);
+  background: var(--surface-hover);
+  font-size: 12px;
+  font-weight: 800;
   white-space: nowrap;
 }
 

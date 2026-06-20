@@ -141,6 +141,13 @@ export function getActions() {
   return api('/api/actions')
 }
 
+export function getActionAudit(options = {}) {
+  const params = new URLSearchParams()
+  if (options.limit) params.set('limit', String(options.limit))
+  const query = params.toString()
+  return api(`/api/actions/audit${query ? `?${query}` : ''}`)
+}
+
 export function executeAction(actionId) {
   return api(`/api/actions/${encodeURIComponent(actionId)}/execute`, {
     method: 'POST',
