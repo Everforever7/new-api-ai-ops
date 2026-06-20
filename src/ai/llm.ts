@@ -35,7 +35,7 @@ export async function generateOpsReport(
     includeModels: settings.context.enabled && settings.context.includeModels,
     includeLatency: settings.context.enabled && settings.context.includeLatency,
     includeBalance: settings.context.enabled && settings.context.includeBalance,
-    customInstructions: settings.prompt.customInstructions,
+    reportInstructions: settings.prompt.reportInstructions,
   }
 
   if (!llm.apiKey) {

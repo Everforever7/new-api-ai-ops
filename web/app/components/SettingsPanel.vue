@@ -183,10 +183,10 @@ const settingsTabs = computed(() => [
 const promptEditorConfig = computed(() => {
   if (promptEditorType.value === 'report') {
     return {
-      path: 'prompt.customInstructions',
-      title: props.t('settings.prompt.customInstructions'),
+      path: 'prompt.reportInstructions',
+      title: props.t('settings.prompt.reportInstructions'),
       hint: props.t('settings.prompt.reportHint'),
-      placeholder: props.t('settings.prompt.customPlaceholder'),
+      placeholder: props.t('settings.prompt.reportPlaceholder'),
     }
   }
 

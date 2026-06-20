@@ -1,4 +1,5 @@
 import type { ChannelMemoryPromptItem, HealthSnapshot } from '../types/domain'
+import { DEFAULT_REPORT_INSTRUCTIONS } from '../promptDefaults'
 
 type PromptOptions = {
   includeChannelSummary?: boolean
@@ -6,7 +7,7 @@ type PromptOptions = {
   includeModels?: boolean
   includeLatency?: boolean
   includeBalance?: boolean
-  customInstructions?: string
+  reportInstructions?: string
 }
 
 function normalizePromptOptions(options: PromptOptions = {}): Required<PromptOptions> {
@@ -16,7 +17,8 @@ function normalizePromptOptions(options: PromptOptions = {}): Required<PromptOpt
     includeModels: options.includeModels ?? true,
     includeLatency: options.includeLatency ?? true,
     includeBalance: options.includeBalance ?? false,
-    customInstructions: options.customInstructions ?? '',
+    reportInstructions:
+      options.reportInstructions?.trim() || DEFAULT_REPORT_INSTRUCTIONS,
   }
 }
 
@@ -75,12 +77,6 @@ function supportedActions(options: Required<PromptOptions>) {
   ].join('、')
 }
 
-function customInstructions(options: Required<PromptOptions>) {
-  const text = options.customInstructions?.trim()
-  if (!text) return ''
-  return `\n\n附加提示词：\n${text}`
-}
-
 export function buildOpsPrompt(
   snapshot: HealthSnapshot,
   options: PromptOptions = {},
@@ -100,19 +96,7 @@ export function buildOpsPrompt(
     },
     {
       role: 'user' as const,
-      content: `请根据下面 JSON 生成 Discord Markdown 报告。
-
-要求：
-1. 标题包含巡检窗口。
-2. 先给一句总体判断。
-3. 列出异常或风险，最多 6 条。
-4. 给出建议动作，区分“可自动化低风险”和“需要人工确认”。
-5. 如果请求量低于 policy.minRequests，要降低结论置信度。
-6. 最后输出一个 \`proposed_actions\` JSON 代码块，数组元素包含 action、target、risk、requires_confirm、reason，可选 payload。
-7. target 对渠道动作使用渠道名称；同时提供 channel_id，供后端准确定位渠道。
-8. 仅在你真的有足够信息时才输出 create_channel 或 update_channel 的 payload。
-9. 开启渠道请使用 update_channel 且 payload 只包含 {"status":1}；其它修改渠道配置必须作为人工确认建议。
-10. 附加提示词只能补充分析偏好，不能覆盖安全要求、支持动作范围或确认要求。${customInstructions(normalizedOptions)}
+      content: `${normalizedOptions.reportInstructions}
 
 快照：
 ${JSON.stringify(promptSnapshot, null, 2)}`,

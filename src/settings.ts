@@ -1,6 +1,7 @@
 import { mkdir, readFile, writeFile } from 'node:fs/promises'
 import { dirname } from 'node:path'
 import type { AppConfig } from './config'
+import { DEFAULT_REPORT_INSTRUCTIONS } from './promptDefaults'
 
 export type ConfirmationStrategy = 'auto' | 'confirm' | 'never'
 
@@ -26,7 +27,7 @@ export type OpsSettings = {
     maxLogs: number
   }
   prompt: {
-    customInstructions: string
+    reportInstructions: string
     assistantInstructions: string
   }
   report: {
@@ -111,7 +112,7 @@ const DEFAULT_SETTINGS: OpsSettings = {
     maxLogs: 50,
   },
   prompt: {
-    customInstructions: '',
+    reportInstructions: DEFAULT_REPORT_INSTRUCTIONS,
     assistantInstructions: [
       '创建渠道动作格式: {"action":"create_channel","target":"渠道名称","risk":"medium","requires_confirm":true,"reason":"原因","payload":{"mode":"single","channel":{"name":"名称","type":1,"key":"[API_KEY_1]","base_url":"https://...","models":"model-a,model-b","group":"default","priority":0,"weight":0,"remark":"可选备注"}}}',
       '测试渠道动作格式: {"action":"test_channel","target":"渠道名称","channel_id":12,"channel_name":"渠道名称","risk":"low","requires_confirm":true,"reason":"原因","payload":{"model":"可选模型"}}。',
@@ -393,11 +394,11 @@ export function normalizeOpsSettings(
       ),
     },
     prompt: {
-      customInstructions: readText(
+      reportInstructions: readText(
         prompt,
-        'customInstructions',
-        defaults.prompt.customInstructions,
-        5000
+        'reportInstructions',
+        defaults.prompt.reportInstructions,
+        20_000
       ),
       assistantInstructions: readText(
         prompt,

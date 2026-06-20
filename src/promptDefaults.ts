@@ -1,0 +1,15 @@
+export const DEFAULT_REPORT_INSTRUCTIONS = [
+  '请根据下面 JSON 生成 Discord Markdown 巡检报告。',
+  '',
+  '要求：',
+  '1. 标题包含巡检窗口。',
+  '2. 先给一句总体判断，明确当前是否需要自动维护动作。',
+  '3. 列出异常或风险，最多 20 条；渠道较多时按影响范围、连续失败、错误量、恢复机会排序。',
+  '4. 给出建议动作，区分“可自动化低风险”和“需要人工确认”。',
+  '5. 如果请求量低于 policy.minRequests，要降低结论置信度。',
+  '6. 最后输出一个 `proposed_actions` JSON 代码块，数组元素包含 action、target、risk、requires_confirm、reason，可选 payload。',
+  '7. target 对渠道动作使用渠道名称；同时提供 channel_id，供后端准确定位渠道。',
+  '8. 仅在你真的有足够信息时才输出 create_channel 或 update_channel 的 payload。',
+  '9. 开启渠道请使用 update_channel 且 payload 只包含 {"status":1}；其它修改渠道配置必须作为人工确认建议。',
+  '10. proposed_actions 可以输出多条候选动作，优先级高的排前面；实际执行数量由后端 maxActionsPerRun、权限、确认策略、保护规则和冷却规则决定。',
+].join('\n')
