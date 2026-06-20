@@ -23,13 +23,18 @@ export async function generateOpsReport(
 ) {
   const settings = await loadOpsSettings()
   const llm = await loadEffectiveLlmConfig(config)
-  const channelMemorySummary = await getChannelMemoryPromptSummary()
+  const channelMemorySummary = settings.context.enabled && settings.context.includeChannelMemory
+    ? await getChannelMemoryPromptSummary()
+    : []
   const promptOptions = {
-    includeChannelSummary: settings.prompt.includeChannelSummary,
-    includeErrors: settings.prompt.includeErrors,
-    includeModels: settings.prompt.includeModels,
-    includeLatency: settings.prompt.includeLatency,
-    includeBalance: settings.prompt.includeBalance,
+    includeChannelSummary:
+      settings.context.enabled && settings.context.includeChannelSummary,
+    includeErrors:
+      settings.context.enabled &&
+      (settings.context.includeLogStats || settings.context.includeRecentLogs),
+    includeModels: settings.context.enabled && settings.context.includeModels,
+    includeLatency: settings.context.enabled && settings.context.includeLatency,
+    includeBalance: settings.context.enabled && settings.context.includeBalance,
     customInstructions: settings.prompt.customInstructions,
   }
 

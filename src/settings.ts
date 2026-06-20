@@ -12,26 +12,22 @@ export type OpsSettings = {
     temperature: number
     apiKey?: string
   }
-  prompt: {
+  context: {
+    enabled: boolean
     includeChannelSummary: boolean
-    includeErrors: boolean
+    includeChannelDetails: boolean
+    includeRecentLogs: boolean
+    includeLogStats: boolean
     includeModels: boolean
     includeLatency: boolean
     includeBalance: boolean
+    includeChannelMemory: boolean
+    maxChannels: number
+    maxLogs: number
+  }
+  prompt: {
     customInstructions: string
     assistantInstructions: string
-    assistantContext: {
-      enabled: boolean
-      includeChannelSummary: boolean
-      includeChannelDetails: boolean
-      includeRecentLogs: boolean
-      includeLogStats: boolean
-      includeModels: boolean
-      includeLatency: boolean
-      includeBalance: boolean
-      maxChannels: number
-      maxLogs: number
-    }
   }
   report: {
     intervalMinutes: number
@@ -100,12 +96,20 @@ const DEFAULT_SETTINGS: OpsSettings = {
     model: '',
     temperature: 0.2,
   },
-  prompt: {
+  context: {
+    enabled: true,
     includeChannelSummary: true,
-    includeErrors: true,
+    includeChannelDetails: true,
+    includeRecentLogs: true,
+    includeLogStats: true,
     includeModels: true,
     includeLatency: true,
     includeBalance: false,
+    includeChannelMemory: true,
+    maxChannels: 80,
+    maxLogs: 50,
+  },
+  prompt: {
     customInstructions: '',
     assistantInstructions: [
       '创建渠道动作格式: {"action":"create_channel","target":"渠道名称","risk":"medium","requires_confirm":true,"reason":"原因","payload":{"mode":"single","channel":{"name":"名称","type":1,"key":"[API_KEY_1]","base_url":"https://...","models":"model-a,model-b","group":"default","priority":0,"weight":0,"remark":"可选备注"}}}',
@@ -117,18 +121,6 @@ const DEFAULT_SETTINGS: OpsSettings = {
       '如果用户分多轮补充信息，你可以结合最近对话上下文生成完整动作；例如上一轮已有 [API_KEY_1] 和 base_url，本轮只补模型时，可以使用 [API_KEY_1]。',
       '回复中要提醒用户到动作队列查看后端策略给出的最终状态。',
     ].join('\n'),
-    assistantContext: {
-      enabled: true,
-      includeChannelSummary: true,
-      includeChannelDetails: true,
-      includeRecentLogs: true,
-      includeLogStats: true,
-      includeModels: true,
-      includeLatency: true,
-      includeBalance: false,
-      maxChannels: 80,
-      maxLogs: 50,
-    },
   },
   report: {
     intervalMinutes: 15,
@@ -197,6 +189,10 @@ function readBoolean(
 ) {
   const value = source[key]
   return typeof value === 'boolean' ? value : fallback
+}
+
+function hasOwnKey(source: Record<string, unknown>, key: string) {
+  return Object.prototype.hasOwnProperty.call(source, key)
 }
 
 function readNumber(
@@ -301,6 +297,7 @@ export function normalizeOpsSettings(
   const root = isRecord(input) ? input : {}
   const llm = readRecord(root, 'llm')
   const aiExecution = readRecord(root, 'aiExecution')
+  const context = readRecord(root, 'context')
   const prompt = readRecord(root, 'prompt')
   const report = readRecord(root, 'report')
   const permissions = readRecord(aiExecution, 'permissions')
@@ -310,6 +307,18 @@ export function normalizeOpsSettings(
   const activeTesting = readRecord(root, 'activeTesting')
   const storage = readRecord(root, 'storage')
   const assistantContext = readRecord(prompt, 'assistantContext')
+  const hasLegacyIncludeErrors = hasOwnKey(prompt, 'includeErrors')
+  const legacyIncludeErrors = readBoolean(
+    prompt,
+    'includeErrors',
+    defaults.context.includeLogStats
+  )
+  const legacyRecentLogs = hasLegacyIncludeErrors
+    ? legacyIncludeErrors
+    : defaults.context.includeRecentLogs
+  const legacyLogStats = hasLegacyIncludeErrors
+    ? legacyIncludeErrors
+    : defaults.context.includeLogStats
 
   const nextApiKey = readText(llm, 'apiKey', '', 20_000)
   const clearApiKey = readBoolean(llm, 'clearApiKey', false)
@@ -334,32 +343,116 @@ export function normalizeOpsSettings(
       ),
       ...(apiKey ? { apiKey } : {}),
     },
-    prompt: {
-      includeChannelSummary: readBoolean(
-        prompt,
-        'includeChannelSummary',
-        defaults.prompt.includeChannelSummary
+    context: {
+      enabled: readBoolean(
+        context,
+        'enabled',
+        readBoolean(
+          assistantContext,
+          'enabled',
+          defaults.context.enabled
+        )
       ),
-      includeErrors: readBoolean(
-        prompt,
-        'includeErrors',
-        defaults.prompt.includeErrors
+      includeChannelSummary: readBoolean(
+        context,
+        'includeChannelSummary',
+        readBoolean(
+          assistantContext,
+          'includeChannelSummary',
+          readBoolean(
+            prompt,
+            'includeChannelSummary',
+            defaults.context.includeChannelSummary
+          )
+        )
+      ),
+      includeChannelDetails: readBoolean(
+        context,
+        'includeChannelDetails',
+        readBoolean(
+          assistantContext,
+          'includeChannelDetails',
+          defaults.context.includeChannelDetails
+        )
+      ),
+      includeRecentLogs: readBoolean(
+        context,
+        'includeRecentLogs',
+        readBoolean(
+          assistantContext,
+          'includeRecentLogs',
+          legacyRecentLogs
+        )
+      ),
+      includeLogStats: readBoolean(
+        context,
+        'includeLogStats',
+        readBoolean(
+          assistantContext,
+          'includeLogStats',
+          legacyLogStats
+        )
       ),
       includeModels: readBoolean(
-        prompt,
+        context,
         'includeModels',
-        defaults.prompt.includeModels
+        readBoolean(
+          assistantContext,
+          'includeModels',
+          readBoolean(prompt, 'includeModels', defaults.context.includeModels)
+        )
       ),
       includeLatency: readBoolean(
-        prompt,
+        context,
         'includeLatency',
-        defaults.prompt.includeLatency
+        readBoolean(
+          assistantContext,
+          'includeLatency',
+          readBoolean(prompt, 'includeLatency', defaults.context.includeLatency)
+        )
       ),
       includeBalance: readBoolean(
-        prompt,
+        context,
         'includeBalance',
-        defaults.prompt.includeBalance
+        readBoolean(
+          assistantContext,
+          'includeBalance',
+          readBoolean(prompt, 'includeBalance', defaults.context.includeBalance)
+        )
       ),
+      includeChannelMemory: readBoolean(
+        context,
+        'includeChannelMemory',
+        defaults.context.includeChannelMemory
+      ),
+      maxChannels: readNumber(
+        context,
+        'maxChannels',
+        readNumber(
+          assistantContext,
+          'maxChannels',
+          defaults.context.maxChannels,
+          1,
+          1000
+        ),
+        1,
+        1000
+      ),
+      maxLogs: readNumber(
+        context,
+        'maxLogs',
+        readNumber(
+          assistantContext,
+          'maxLogs',
+          defaults.context.maxLogs,
+          1,
+          500
+        ),
+        1,
+        500
+      ),
+    },
+    prompt: {
       customInstructions: readText(
         prompt,
         'customInstructions',
@@ -372,62 +465,6 @@ export function normalizeOpsSettings(
         defaults.prompt.assistantInstructions,
         12_000
       ),
-      assistantContext: {
-        enabled: readBoolean(
-          assistantContext,
-          'enabled',
-          defaults.prompt.assistantContext.enabled
-        ),
-        includeChannelSummary: readBoolean(
-          assistantContext,
-          'includeChannelSummary',
-          defaults.prompt.assistantContext.includeChannelSummary
-        ),
-        includeChannelDetails: readBoolean(
-          assistantContext,
-          'includeChannelDetails',
-          defaults.prompt.assistantContext.includeChannelDetails
-        ),
-        includeRecentLogs: readBoolean(
-          assistantContext,
-          'includeRecentLogs',
-          defaults.prompt.assistantContext.includeRecentLogs
-        ),
-        includeLogStats: readBoolean(
-          assistantContext,
-          'includeLogStats',
-          defaults.prompt.assistantContext.includeLogStats
-        ),
-        includeModels: readBoolean(
-          assistantContext,
-          'includeModels',
-          defaults.prompt.assistantContext.includeModels
-        ),
-        includeLatency: readBoolean(
-          assistantContext,
-          'includeLatency',
-          defaults.prompt.assistantContext.includeLatency
-        ),
-        includeBalance: readBoolean(
-          assistantContext,
-          'includeBalance',
-          defaults.prompt.assistantContext.includeBalance
-        ),
-        maxChannels: readNumber(
-          assistantContext,
-          'maxChannels',
-          defaults.prompt.assistantContext.maxChannels,
-          1,
-          1000
-        ),
-        maxLogs: readNumber(
-          assistantContext,
-          'maxLogs',
-          defaults.prompt.assistantContext.maxLogs,
-          1,
-          500
-        ),
-      },
     },
     report: {
       intervalMinutes: readNumber(

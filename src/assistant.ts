@@ -221,9 +221,11 @@ export async function planAssistantResponse(
 ): Promise<AssistantTurnPlan> {
   const llm = await loadEffectiveLlmConfig(config)
   const settings = await loadOpsSettings()
-  const memorySummary = await getChannelMemoryPromptSummary()
+  const memorySummary = settings.context.enabled && settings.context.includeChannelMemory
+    ? await getChannelMemoryPromptSummary()
+    : []
   const runtimeContext = llm.apiKey
-    ? await collectAssistantRuntimeContext(config, settings.prompt.assistantContext)
+    ? await collectAssistantRuntimeContext(config, settings.context)
     : undefined
   const planned = llm.apiKey
     ? (await planWithLlm(
@@ -341,7 +343,7 @@ function buildChatMessages(
 
 async function collectAssistantRuntimeContext(
   config: AppConfig,
-  options: OpsSettings['prompt']['assistantContext']
+  options: OpsSettings['context']
 ) {
   if (!options.enabled) return undefined
 
@@ -456,7 +458,7 @@ function buildAssistantChannelSummary(channels: Channel[]) {
 
 function summarizeChannelForAssistant(
   channel: Channel,
-  options: OpsSettings['prompt']['assistantContext']
+  options: OpsSettings['context']
 ) {
   return {
     id: channel.id,

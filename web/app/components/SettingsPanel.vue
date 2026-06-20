@@ -76,81 +76,54 @@ const permissionRows = computed(() => [
   },
 ])
 
-const promptRows = computed(() => [
+const contextRows = computed(() => [
   {
     key: 'includeChannelSummary',
     icon: ListChecks,
-    title: props.t('settings.prompt.parts.channelSummary'),
-    hint: props.t('settings.prompt.hints.channelSummary'),
-  },
-  {
-    key: 'includeErrors',
-    icon: Activity,
-    title: props.t('settings.prompt.parts.errors'),
-    hint: props.t('settings.prompt.hints.errors'),
-  },
-  {
-    key: 'includeModels',
-    icon: BarChart3,
-    title: props.t('settings.prompt.parts.models'),
-    hint: props.t('settings.prompt.hints.models'),
-  },
-  {
-    key: 'includeLatency',
-    icon: Gauge,
-    title: props.t('settings.prompt.parts.latency'),
-    hint: props.t('settings.prompt.hints.latency'),
-  },
-  {
-    key: 'includeBalance',
-    icon: WalletCards,
-    title: props.t('settings.prompt.parts.balance'),
-    hint: props.t('settings.prompt.hints.balance'),
-  },
-])
-
-const assistantContextRows = computed(() => [
-  {
-    key: 'includeChannelSummary',
-    icon: ListChecks,
-    title: props.t('settings.prompt.assistantContext.parts.channelSummary'),
-    hint: props.t('settings.prompt.assistantContext.hints.channelSummary'),
+    title: props.t('settings.context.parts.channelSummary'),
+    hint: props.t('settings.context.hints.channelSummary'),
   },
   {
     key: 'includeChannelDetails',
     icon: Radio,
-    title: props.t('settings.prompt.assistantContext.parts.channelDetails'),
-    hint: props.t('settings.prompt.assistantContext.hints.channelDetails'),
+    title: props.t('settings.context.parts.channelDetails'),
+    hint: props.t('settings.context.hints.channelDetails'),
   },
   {
     key: 'includeRecentLogs',
     icon: Activity,
-    title: props.t('settings.prompt.assistantContext.parts.recentLogs'),
-    hint: props.t('settings.prompt.assistantContext.hints.recentLogs'),
+    title: props.t('settings.context.parts.recentLogs'),
+    hint: props.t('settings.context.hints.recentLogs'),
   },
   {
     key: 'includeLogStats',
     icon: BarChart3,
-    title: props.t('settings.prompt.assistantContext.parts.logStats'),
-    hint: props.t('settings.prompt.assistantContext.hints.logStats'),
+    title: props.t('settings.context.parts.logStats'),
+    hint: props.t('settings.context.hints.logStats'),
   },
   {
     key: 'includeModels',
     icon: Brain,
-    title: props.t('settings.prompt.assistantContext.parts.models'),
-    hint: props.t('settings.prompt.assistantContext.hints.models'),
+    title: props.t('settings.context.parts.models'),
+    hint: props.t('settings.context.hints.models'),
   },
   {
     key: 'includeLatency',
     icon: Gauge,
-    title: props.t('settings.prompt.assistantContext.parts.latency'),
-    hint: props.t('settings.prompt.assistantContext.hints.latency'),
+    title: props.t('settings.context.parts.latency'),
+    hint: props.t('settings.context.hints.latency'),
   },
   {
     key: 'includeBalance',
     icon: WalletCards,
-    title: props.t('settings.prompt.assistantContext.parts.balance'),
-    hint: props.t('settings.prompt.assistantContext.hints.balance'),
+    title: props.t('settings.context.parts.balance'),
+    hint: props.t('settings.context.hints.balance'),
+  },
+  {
+    key: 'includeChannelMemory',
+    icon: ListChecks,
+    title: props.t('settings.context.parts.channelMemory'),
+    hint: props.t('settings.context.hints.channelMemory'),
   },
 ])
 
@@ -182,14 +155,14 @@ const settingsTabs = computed(() => [
     label: props.t('settings.prompt.title'),
   },
   {
+    id: 'context',
+    icon: ListChecks,
+    label: props.t('settings.context.title'),
+  },
+  {
     id: 'activeTesting',
     icon: FlaskConical,
     label: props.t('settings.activeTesting.title'),
-  },
-  {
-    id: 'report',
-    icon: FileText,
-    label: props.t('settings.report.title'),
   },
   {
     id: 'storage',
@@ -497,143 +470,6 @@ function logout() {
             class="settings-stack"
             role="tabpanel"
           >
-            <div class="settings-section-title">
-              <ListChecks :size="18" />
-              <span>{{ t('settings.prompt.reportContextTitle') }}</span>
-            </div>
-            <div class="bento-table-wrap">
-              <table class="settings-table">
-                <thead>
-                  <tr>
-                    <th>{{ t('settings.prompt.part') }}</th>
-                    <th>{{ t('settings.prompt.include') }}</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  <tr v-for="row in promptRows" :key="row.key">
-                    <td>
-                      <div class="permission-name prompt-name">
-                        <component :is="row.icon" :size="18" />
-                        <span>
-                          <strong>{{ row.title }}</strong>
-                          <small>{{ row.hint }}</small>
-                        </span>
-                      </div>
-                    </td>
-                    <td>
-                      <button
-                        class="setting-switch small"
-                        :class="{ active: settingValue(`prompt.${row.key}`) }"
-                        type="button"
-                        :aria-pressed="settingValue(`prompt.${row.key}`)"
-                        @click="
-                          update(
-                            `prompt.${row.key}`,
-                            !settingValue(`prompt.${row.key}`)
-                          )
-                        "
-                      >
-                        {{
-                          settingValue(`prompt.${row.key}`)
-                            ? t('settings.on')
-                            : t('settings.off')
-                        }}
-                      </button>
-                    </td>
-                  </tr>
-                </tbody>
-              </table>
-            </div>
-
-            <div class="settings-section">
-              <div class="settings-control-row">
-                <div class="settings-inline-main">
-                  <div class="bento-label">{{ t('settings.prompt.assistantContext.title') }}</div>
-                  <div class="bento-sub">{{ t('settings.prompt.assistantContext.hint') }}</div>
-                </div>
-                <button
-                  class="setting-switch"
-                  :class="{ active: settingValue('prompt.assistantContext.enabled') }"
-                  type="button"
-                  :aria-pressed="settingValue('prompt.assistantContext.enabled')"
-                  @click="update('prompt.assistantContext.enabled', !settingValue('prompt.assistantContext.enabled'))"
-                >
-                  {{
-                    settingValue('prompt.assistantContext.enabled')
-                      ? t('settings.on')
-                      : t('settings.off')
-                  }}
-                </button>
-              </div>
-
-              <div class="bento-table-wrap">
-                <table class="settings-table">
-                  <thead>
-                    <tr>
-                      <th>{{ t('settings.prompt.part') }}</th>
-                      <th>{{ t('settings.prompt.include') }}</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    <tr v-for="row in assistantContextRows" :key="row.key">
-                      <td>
-                        <div class="permission-name prompt-name">
-                          <component :is="row.icon" :size="18" />
-                          <span>
-                            <strong>{{ row.title }}</strong>
-                            <small>{{ row.hint }}</small>
-                          </span>
-                        </div>
-                      </td>
-                      <td>
-                        <button
-                          class="setting-switch small"
-                          :class="{ active: settingValue(`prompt.assistantContext.${row.key}`) }"
-                          type="button"
-                          :aria-pressed="settingValue(`prompt.assistantContext.${row.key}`)"
-                          @click="
-                            update(
-                              `prompt.assistantContext.${row.key}`,
-                              !settingValue(`prompt.assistantContext.${row.key}`)
-                            )
-                          "
-                        >
-                          {{
-                            settingValue(`prompt.assistantContext.${row.key}`)
-                              ? t('settings.on')
-                              : t('settings.off')
-                          }}
-                        </button>
-                      </td>
-                    </tr>
-                  </tbody>
-                </table>
-              </div>
-
-              <div class="settings-number-grid active-testing-grid">
-                <label class="settings-field">
-                  <span>{{ t('settings.prompt.assistantContext.maxChannels') }}</span>
-                  <input
-                    type="number"
-                    min="1"
-                    :value="settingValue('prompt.assistantContext.maxChannels')"
-                    @input="update('prompt.assistantContext.maxChannels', Number($event.target.value))"
-                  />
-                  <small>{{ t('settings.prompt.assistantContext.maxChannelsHint') }}</small>
-                </label>
-                <label class="settings-field">
-                  <span>{{ t('settings.prompt.assistantContext.maxLogs') }}</span>
-                  <input
-                    type="number"
-                    min="1"
-                    :value="settingValue('prompt.assistantContext.maxLogs')"
-                    @input="update('prompt.assistantContext.maxLogs', Number($event.target.value))"
-                  />
-                  <small>{{ t('settings.prompt.assistantContext.maxLogsHint') }}</small>
-                </label>
-              </div>
-            </div>
-
             <div class="prompt-editor-launches">
               <button
                 class="prompt-editor-button"
@@ -661,10 +497,124 @@ function logout() {
           </div>
 
           <div
+            v-else-if="activeSettingsTab === 'context'"
+            class="settings-stack"
+            role="tabpanel"
+          >
+            <div class="settings-section">
+              <div class="settings-control-row">
+                <div class="settings-inline-main">
+                  <div class="bento-label">{{ t('settings.context.enabled') }}</div>
+                  <div class="bento-sub">{{ t('settings.context.enabledHint') }}</div>
+                </div>
+                <button
+                  class="setting-switch"
+                  :class="{ active: settingValue('context.enabled') }"
+                  type="button"
+                  :aria-pressed="settingValue('context.enabled')"
+                  @click="update('context.enabled', !settingValue('context.enabled'))"
+                >
+                  {{
+                    settingValue('context.enabled')
+                      ? t('settings.on')
+                      : t('settings.off')
+                  }}
+                </button>
+              </div>
+
+              <div class="bento-table-wrap">
+                <table class="settings-table">
+                  <thead>
+                    <tr>
+                      <th>{{ t('settings.context.part') }}</th>
+                      <th>{{ t('settings.context.include') }}</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr v-for="row in contextRows" :key="row.key">
+                      <td>
+                        <div class="permission-name prompt-name">
+                          <component :is="row.icon" :size="18" />
+                          <span>
+                            <strong>{{ row.title }}</strong>
+                            <small>{{ row.hint }}</small>
+                          </span>
+                        </div>
+                      </td>
+                      <td>
+                        <button
+                          class="setting-switch small"
+                          :class="{ active: settingValue(`context.${row.key}`) }"
+                          type="button"
+                          :aria-pressed="settingValue(`context.${row.key}`)"
+                          @click="
+                            update(
+                              `context.${row.key}`,
+                              !settingValue(`context.${row.key}`)
+                            )
+                          "
+                        >
+                          {{
+                            settingValue(`context.${row.key}`)
+                              ? t('settings.on')
+                              : t('settings.off')
+                          }}
+                        </button>
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+
+              <div class="settings-number-grid active-testing-grid">
+                <label class="settings-field">
+                  <span>{{ t('settings.context.maxChannels') }}</span>
+                  <input
+                    type="number"
+                    min="1"
+                    :value="settingValue('context.maxChannels')"
+                    @input="update('context.maxChannels', Number($event.target.value))"
+                  />
+                  <small>{{ t('settings.context.maxChannelsHint') }}</small>
+                </label>
+                <label class="settings-field">
+                  <span>{{ t('settings.context.maxLogs') }}</span>
+                  <input
+                    type="number"
+                    min="1"
+                    :value="settingValue('context.maxLogs')"
+                    @input="update('context.maxLogs', Number($event.target.value))"
+                  />
+                  <small>{{ t('settings.context.maxLogsHint') }}</small>
+                </label>
+              </div>
+            </div>
+          </div>
+
+          <div
             v-else-if="activeSettingsTab === 'activeTesting'"
             class="settings-stack"
             role="tabpanel"
           >
+            <div class="settings-section">
+              <div class="settings-section-title">
+                <FileText :size="18" />
+                <span>{{ t('settings.report.scheduleTitle') }}</span>
+              </div>
+              <div class="settings-number-grid active-testing-grid">
+                <label class="settings-field">
+                  <span>{{ t('settings.report.intervalMinutes') }}</span>
+                  <input
+                    type="number"
+                    min="1"
+                    :value="settingValue('report.intervalMinutes')"
+                    @input="update('report.intervalMinutes', Number($event.target.value))"
+                  />
+                  <small>{{ t('settings.report.intervalHint') }}</small>
+                </label>
+              </div>
+            </div>
+
             <div class="settings-control-row">
               <div class="settings-inline-main">
                 <div class="bento-label">{{ t('settings.activeTesting.enabled') }}</div>
@@ -737,31 +687,6 @@ function logout() {
                     @input="update('activeTesting.defaultModel', $event.target.value)"
                   />
                   <small>{{ t('settings.activeTesting.defaultModelHint') }}</small>
-                </label>
-              </div>
-            </div>
-          </div>
-
-          <div
-            v-else-if="activeSettingsTab === 'report'"
-            class="settings-stack"
-            role="tabpanel"
-          >
-            <div class="settings-section">
-              <div class="settings-section-title">
-                <FileText :size="18" />
-                <span>{{ t('settings.report.scheduleTitle') }}</span>
-              </div>
-              <div class="settings-number-grid active-testing-grid">
-                <label class="settings-field">
-                  <span>{{ t('settings.report.intervalMinutes') }}</span>
-                  <input
-                    type="number"
-                    min="1"
-                    :value="settingValue('report.intervalMinutes')"
-                    @input="update('report.intervalMinutes', Number($event.target.value))"
-                  />
-                  <small>{{ t('settings.report.intervalHint') }}</small>
                 </label>
               </div>
             </div>
