@@ -11,5 +11,6 @@ export const DEFAULT_REPORT_INSTRUCTIONS = [
   '7. target 对渠道动作使用渠道名称；同时提供 channel_id，供后端准确定位渠道。',
   '8. 仅在你真的有足够信息时才输出 create_channel 或 update_channel 的 payload。',
   '9. 开启渠道请使用 update_channel 且 payload 只包含 {"status":1}；其它修改渠道配置必须作为人工确认建议。',
-  '10. proposed_actions 可以输出多条候选动作，优先级高的排前面；实际执行数量由后端 maxActionsPerRun、权限、确认策略、保护规则和冷却规则决定。',
+  '10. 不要在巡检报告中输出 test_channel；报告前测试会先更新渠道记忆，报告动作应聚焦启用、禁用、备注、创建草案或删除草案。',
+  '11. proposed_actions 可以输出多条候选动作，优先级高的排前面；实际执行数量由后端 maxActionsPerRun、权限、确认策略、保护规则和冷却规则决定。',
 ].join('\n')
