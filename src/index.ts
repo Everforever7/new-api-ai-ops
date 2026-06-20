@@ -7,7 +7,9 @@ import { loadOpsSettings } from './settings'
 
 const args = new Set(Bun.argv.slice(2))
 const mode =
-  Bun.argv[2] === 'start' || Bun.argv[2] === 'panel' ? Bun.argv[2] : 'once'
+  Bun.argv[2] === 'start' || Bun.argv[2] === 'panel' || Bun.argv[2] === 'dev'
+    ? Bun.argv[2]
+    : 'once'
 const dryRun = args.has('--dry-run')
 const config = loadConfig()
 try {
@@ -19,7 +21,7 @@ try {
 }
 const runtime = new OpsRuntime(config)
 
-if (mode === 'start') {
+if (mode === 'start' || mode === 'dev') {
   startPanelServer(config, runtime)
   await runtime.refreshActiveTestingScheduler()
   await startScheduler(config, { dryRun }, runtime)

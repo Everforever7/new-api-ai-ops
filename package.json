@@ -5,7 +5,7 @@
   "type": "module",
   "description": "Sidecar AI operations assistant for new-api.",
   "scripts": {
-    "dev": "concurrently --kill-others-on-fail -n panel,web -c cyan,green \"bun run panel\" \"bun run web:dev\"",
+    "dev": "concurrently --kill-others-on-fail -n panel,web -c cyan,green \"bun run src/index.ts dev\" \"bun run web:dev\"",
     "once": "bun run src/index.ts once",
     "start": "bun run src/index.ts start",
     "panel": "bun run src/index.ts panel",
