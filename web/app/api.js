@@ -305,3 +305,7 @@ export function saveChannelMemory(channelId, memory) {
     body: JSON.stringify(memory),
   })
 }
+
+export function getReports() {
+  return api('/api/reports')
+}

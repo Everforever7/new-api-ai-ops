@@ -326,7 +326,7 @@ function saveNote() {
                 <button
                   class="channel-protect-btn channel-action-btn"
                   type="button"
-                  :disabled="isTesting(channel.id) || testingAllChannels"
+                  :disabled="isProtected(channel.id) || isTesting(channel.id) || testingAllChannels"
                   @click="emit('testChannel', channel.id)"
                 >
                   <Play :size="14" />

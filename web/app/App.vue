@@ -819,8 +819,8 @@ onBeforeUnmount(() => {
         <ReportPanel 
           v-else-if="activeTab === 'report'" 
           key="report"
-          :reportText="reportText"
           :t="t"
+          :formatDate="formatDate"
         />
 
         <ChannelsTable 

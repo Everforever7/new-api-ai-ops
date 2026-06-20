@@ -22,7 +22,6 @@ export type RunChannelTestsResult = {
   memorySummary: ChannelMemoryPromptItem[]
 }
 
-const CHANNEL_STATUS_ENABLED = 1
 const TEST_HISTORY_PATH =
   process.env.AI_OPS_TEST_HISTORY_PATH?.trim() || 'data/channel-tests.jsonl'
 const CHANNEL_MEMORY_PATH =
@@ -66,16 +65,51 @@ function parseChannelModelList(channel: Channel) {
     .filter(Boolean)
 }
 
-function selectTestModel(
-  channel: Channel,
-  requestedModel: string | undefined,
-  settings: OpsSettings
-) {
-  const defaultModel = settings.activeTesting.defaultModel.trim()
-  if (defaultModel) return defaultModel
+function selectTestModel(channel: Channel, requestedModel: string | undefined) {
+  const requested = requestedModel?.trim()
+  if (requested) return requested
   const firstChannelModel = parseChannelModelList(channel)[0]
   if (firstChannelModel) return firstChannelModel
-  return requestedModel?.trim() || undefined
+  return undefined
+}
+
+function normalizeText(value: unknown) {
+  return String(value || '').trim().toLowerCase()
+}
+
+function protectedByText(value: unknown, rules: string[]) {
+  const text = normalizeText(value)
+  if (!text) return false
+  return rules.some((rule) => {
+    const next = normalizeText(rule)
+    return next && text.includes(next)
+  })
+}
+
+function protectedByDelimitedText(value: unknown, rules: string[]) {
+  const parts = String(value || '')
+    .split(/[,\n]/g)
+    .map((item) => normalizeText(item))
+    .filter(Boolean)
+
+  if (!parts.length) return false
+
+  return rules.some((rule) => {
+    const next = normalizeText(rule)
+    return next && parts.includes(next)
+  })
+}
+
+function isProtectedChannel(channel: Channel, settings: OpsSettings) {
+  const rules = settings.aiExecution.protectedChannels
+  return (
+    rules.ids.includes(channel.id) ||
+    rules.types.includes(channel.type) ||
+    protectedByDelimitedText(channel.group, rules.groups) ||
+    protectedByDelimitedText(channel.tag, rules.tags) ||
+    protectedByText(channel.name, rules.nameIncludes) ||
+    protectedByText(channel.models, rules.modelIncludes)
+  )
 }
 
 function createRunId(channelId: number) {
@@ -106,12 +140,11 @@ async function mapWithConcurrency<T, R>(
 async function runOneChannelTest(
   client: NewApiClient,
   channel: Channel,
-  settings: OpsSettings,
   options: RunChannelTestsOptions
 ): Promise<ChannelTestRun> {
   const startedAt = now()
   const startedMs = Date.now()
-  const model = selectTestModel(channel, options.model, settings)
+  const model = selectTestModel(channel, options.model)
 
   try {
     const result = await client.testChannel(channel.id, model)
@@ -120,6 +153,7 @@ async function runOneChannelTest(
       id: createRunId(channel.id),
       channelId: channel.id,
       channelName: channel.name,
+      channelStatus: channel.status,
       model,
       status: 'success',
       latencyMs: Math.max(0, Date.now() - startedMs),
@@ -134,6 +168,7 @@ async function runOneChannelTest(
       id: createRunId(channel.id),
       channelId: channel.id,
       channelName: channel.name,
+      channelStatus: channel.status,
       model,
       status: 'failed',
       latencyMs: Math.max(0, Date.now() - startedMs),
@@ -155,12 +190,18 @@ function readRequestedIds(value: number[] | undefined) {
   ]
 }
 
-function selectChannels(channels: Channel[], requestedIds: number[]) {
+function selectChannels(
+  channels: Channel[],
+  requestedIds: number[],
+  settings: OpsSettings
+) {
+  let candidates = channels
   if (requestedIds.length) {
     const ids = new Set(requestedIds)
-    return channels.filter((channel) => ids.has(channel.id))
+    candidates = channels.filter((channel) => ids.has(channel.id))
   }
-  return channels.filter((channel) => channel.status === CHANNEL_STATUS_ENABLED)
+
+  return candidates.filter((channel) => !isProtectedChannel(channel, settings))
 }
 
 async function appendTestRuns(runs: ChannelTestRun[]) {
@@ -302,6 +343,7 @@ function updateMemoryFromRun(
   return {
     ...current,
     channelName: run.channelName || current.channelName,
+    channelStatus: run.channelStatus ?? current.channelStatus,
     protected: settings.aiExecution.protectedChannels.ids.includes(run.channelId),
     aiObservation: buildAiObservation(run, consecutiveFailures),
     testSummary: {
@@ -324,6 +366,7 @@ function memoryToPromptItem(memory: ChannelMemory): ChannelMemoryPromptItem {
   return {
     channelId: memory.channelId,
     channelName: memory.channelName,
+    channelStatus: memory.channelStatus,
     manualNote: memory.manualNote || undefined,
     aiObservation: memory.aiObservation || undefined,
     protected: memory.protected,
@@ -451,11 +494,11 @@ export async function runChannelTests(
   const client = new NewApiClient(config.newApi)
   const channelData = await client.getChannels()
   const requestedIds = readRequestedIds(options.channelIds)
-  const selectedChannels = selectChannels(channelData.items, requestedIds)
+  const selectedChannels = selectChannels(channelData.items, requestedIds, settings)
   const runs = await mapWithConcurrency(
     selectedChannels,
     settings.activeTesting.concurrency,
-    (channel) => runOneChannelTest(client, channel, settings, options)
+    (channel) => runOneChannelTest(client, channel, options)
   )
 
   await appendTestRuns(runs)

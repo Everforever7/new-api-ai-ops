@@ -83,6 +83,7 @@ export type ChannelTestRun = {
   id: string
   channelId: number
   channelName?: string
+  channelStatus?: number
   model?: string
   status: 'success' | 'failed'
   latencyMs?: number
@@ -96,6 +97,7 @@ export type ChannelTestRun = {
 export type ChannelMemory = {
   channelId: number
   channelName?: string
+  channelStatus?: number
   manualNote: string
   aiObservation: string
   protected: boolean
@@ -117,6 +119,7 @@ export type ChannelMemory = {
 export type ChannelMemoryPromptItem = {
   channelId: number
   channelName?: string
+  channelStatus?: number
   manualNote?: string
   aiObservation?: string
   protected: boolean

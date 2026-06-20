@@ -66,7 +66,6 @@ export type OpsSettings = {
     enabled: boolean
     intervalMinutes: number
     concurrency: number
-    defaultModel: string
     failureThreshold: number
     retentionDays: number
   }
@@ -159,7 +158,6 @@ const DEFAULT_SETTINGS: OpsSettings = {
     enabled: false,
     intervalMinutes: 30,
     concurrency: 2,
-    defaultModel: '',
     failureThreshold: 3,
     retentionDays: 30,
   },
@@ -189,10 +187,6 @@ function readBoolean(
 ) {
   const value = source[key]
   return typeof value === 'boolean' ? value : fallback
-}
-
-function hasOwnKey(source: Record<string, unknown>, key: string) {
-  return Object.prototype.hasOwnProperty.call(source, key)
 }
 
 function readNumber(
@@ -306,19 +300,6 @@ export function normalizeOpsSettings(
   const protectedChannels = readRecord(aiExecution, 'protectedChannels')
   const activeTesting = readRecord(root, 'activeTesting')
   const storage = readRecord(root, 'storage')
-  const assistantContext = readRecord(prompt, 'assistantContext')
-  const hasLegacyIncludeErrors = hasOwnKey(prompt, 'includeErrors')
-  const legacyIncludeErrors = readBoolean(
-    prompt,
-    'includeErrors',
-    defaults.context.includeLogStats
-  )
-  const legacyRecentLogs = hasLegacyIncludeErrors
-    ? legacyIncludeErrors
-    : defaults.context.includeRecentLogs
-  const legacyLogStats = hasLegacyIncludeErrors
-    ? legacyIncludeErrors
-    : defaults.context.includeLogStats
 
   const nextApiKey = readText(llm, 'apiKey', '', 20_000)
   const clearApiKey = readBoolean(llm, 'clearApiKey', false)
@@ -347,78 +328,42 @@ export function normalizeOpsSettings(
       enabled: readBoolean(
         context,
         'enabled',
-        readBoolean(
-          assistantContext,
-          'enabled',
-          defaults.context.enabled
-        )
+        defaults.context.enabled
       ),
       includeChannelSummary: readBoolean(
         context,
         'includeChannelSummary',
-        readBoolean(
-          assistantContext,
-          'includeChannelSummary',
-          readBoolean(
-            prompt,
-            'includeChannelSummary',
-            defaults.context.includeChannelSummary
-          )
-        )
+        defaults.context.includeChannelSummary
       ),
       includeChannelDetails: readBoolean(
         context,
         'includeChannelDetails',
-        readBoolean(
-          assistantContext,
-          'includeChannelDetails',
-          defaults.context.includeChannelDetails
-        )
+        defaults.context.includeChannelDetails
       ),
       includeRecentLogs: readBoolean(
         context,
         'includeRecentLogs',
-        readBoolean(
-          assistantContext,
-          'includeRecentLogs',
-          legacyRecentLogs
-        )
+        defaults.context.includeRecentLogs
       ),
       includeLogStats: readBoolean(
         context,
         'includeLogStats',
-        readBoolean(
-          assistantContext,
-          'includeLogStats',
-          legacyLogStats
-        )
+        defaults.context.includeLogStats
       ),
       includeModels: readBoolean(
         context,
         'includeModels',
-        readBoolean(
-          assistantContext,
-          'includeModels',
-          readBoolean(prompt, 'includeModels', defaults.context.includeModels)
-        )
+        defaults.context.includeModels
       ),
       includeLatency: readBoolean(
         context,
         'includeLatency',
-        readBoolean(
-          assistantContext,
-          'includeLatency',
-          readBoolean(prompt, 'includeLatency', defaults.context.includeLatency)
-        )
+        defaults.context.includeLatency
       ),
       includeBalance: readBoolean(
         context,
         'includeBalance',
-        readBoolean(
-          assistantContext,
-          'includeBalance',
-          readBoolean(prompt, 'includeBalance', defaults.context.includeBalance)
-        )
+        defaults.context.includeBalance
       ),
       includeChannelMemory: readBoolean(
         context,
@@ -428,26 +373,14 @@ export function normalizeOpsSettings(
       maxChannels: readNumber(
         context,
         'maxChannels',
-        readNumber(
-          assistantContext,
-          'maxChannels',
-          defaults.context.maxChannels,
-          1,
-          1000
-        ),
+        defaults.context.maxChannels,
         1,
         1000
       ),
       maxLogs: readNumber(
         context,
         'maxLogs',
-        readNumber(
-          assistantContext,
-          'maxLogs',
-          defaults.context.maxLogs,
-          1,
-          500
-        ),
+        defaults.context.maxLogs,
         1,
         500
       ),
@@ -590,12 +523,6 @@ export function normalizeOpsSettings(
         defaults.activeTesting.concurrency,
         1,
         20
-      ),
-      defaultModel: readText(
-        activeTesting,
-        'defaultModel',
-        defaults.activeTesting.defaultModel,
-        200
       ),
       failureThreshold: readNumber(
         activeTesting,

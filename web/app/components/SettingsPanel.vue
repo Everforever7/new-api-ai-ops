@@ -155,11 +155,6 @@ const settingsTabs = computed(() => [
     label: props.t('settings.prompt.title'),
   },
   {
-    id: 'context',
-    icon: ListChecks,
-    label: props.t('settings.context.title'),
-  },
-  {
     id: 'activeTesting',
     icon: FlaskConical,
     label: props.t('settings.activeTesting.title'),
@@ -494,14 +489,13 @@ function logout() {
                 <span>{{ t('settings.prompt.coreSafetyHint') }}</span>
               </div>
             </div>
-          </div>
 
-          <div
-            v-else-if="activeSettingsTab === 'context'"
-            class="settings-stack"
-            role="tabpanel"
-          >
             <div class="settings-section">
+              <div class="settings-section-title">
+                <ListChecks :size="18" />
+                <span>{{ t('settings.context.title') }}</span>
+              </div>
+
               <div class="settings-control-row">
                 <div class="settings-inline-main">
                   <div class="bento-label">{{ t('settings.context.enabled') }}</div>
@@ -676,17 +670,6 @@ function logout() {
                     :value="settingValue('activeTesting.retentionDays')"
                     @input="update('activeTesting.retentionDays', Number($event.target.value))"
                   />
-                </label>
-                <label class="settings-field active-testing-model-field">
-                  <span>{{ t('settings.activeTesting.defaultModel') }}</span>
-                  <input
-                    type="text"
-                    autocomplete="off"
-                    :placeholder="t('settings.activeTesting.defaultModelPlaceholder')"
-                    :value="settingValue('activeTesting.defaultModel')"
-                    @input="update('activeTesting.defaultModel', $event.target.value)"
-                  />
-                  <small>{{ t('settings.activeTesting.defaultModelHint') }}</small>
                 </label>
               </div>
             </div>

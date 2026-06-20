@@ -1,4 +1,5 @@
 import { extname, isAbsolute, join, relative } from 'node:path'
+import { readdir, stat } from 'node:fs/promises'
 import { fileURLToPath } from 'node:url'
 import type { AppConfig } from '../config'
 import type { Channel } from '../types/domain'
@@ -332,6 +333,31 @@ async function handleApi(
 
     if (url.pathname === '/api/channel-memory' && req.method === 'GET') {
       return json(await listChannelMemories())
+    }
+
+    if (url.pathname === '/api/reports' && req.method === 'GET') {
+      try {
+        const reportsDir = config.report.saveDir
+        const entries = await readdir(reportsDir, { withFileTypes: true })
+        const reports = await Promise.all(
+          entries
+            .filter((entry) => entry.isFile() && entry.name.endsWith('.md'))
+            .map(async (entry) => {
+              const path = join(reportsDir, entry.name)
+              const info = await stat(path)
+              const content = await Bun.file(path).text()
+              return { name: entry.name, path, mtimeMs: info.mtimeMs, content }
+            })
+        )
+        const sorted = reports.sort((a, b) => b.mtimeMs - a.mtimeMs)
+        return json(sorted)
+      } catch (err: any) {
+        if (err.code === 'ENOENT') return json([])
+        return new Response(JSON.stringify({ error: err.message }), {
+          status: 500,
+          headers: { 'Content-Type': 'application/json' },
+        })
+      }
     }
 
     const memoryMatch = url.pathname.match(/^\/api\/channel-memory\/(\d+)$/)

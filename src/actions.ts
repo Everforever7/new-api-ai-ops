@@ -54,6 +54,7 @@ export type RawAction = {
 }
 
 const AUDIT_PATH = process.env.AI_OPS_ACTION_AUDIT_PATH?.trim() || 'data/action-audit.jsonl'
+const CHANNEL_STATUS_ENABLED = 1
 const CHANNEL_STATUS_AUTO_DISABLED = 2
 const REDACTED_VALUE = '[REDACTED]'
 const CREATE_CHANNEL_FIELDS = new Set([
@@ -839,22 +840,43 @@ export async function buildActiveTestActionDrafts(
   memories: ChannelMemory[],
   failureThreshold: number
 ) {
-  const rawActions: RawAction[] = memories
-    .filter((memory) => {
-      return (
-        memory.testSummary.lastStatus === 'failed' &&
-        memory.testSummary.consecutiveFailures >= failureThreshold
-      )
-    })
-    .map((memory) => ({
-      action: 'disable_channel',
-      target: memory.channelName || '未命名渠道',
-      channel_id: memory.channelId,
-      channel_name: memory.channelName,
-      risk: 'medium',
-      requires_confirm: true,
-      reason: `active testing observed ${memory.testSummary.consecutiveFailures} consecutive failures${memory.testSummary.lastError ? `: ${memory.testSummary.lastError}` : ''}`,
-    }))
+  const rawActions: RawAction[] = []
+
+  for (const memory of memories) {
+    if (
+      memory.channelStatus === CHANNEL_STATUS_ENABLED &&
+      memory.testSummary.lastStatus === 'failed' &&
+      memory.testSummary.consecutiveFailures >= failureThreshold
+    ) {
+      rawActions.push({
+        action: 'disable_channel',
+        target: memory.channelName || '未命名渠道',
+        channel_id: memory.channelId,
+        channel_name: memory.channelName,
+        risk: 'medium',
+        requires_confirm: true,
+        reason: `active testing observed ${memory.testSummary.consecutiveFailures} consecutive failures${memory.testSummary.lastError ? `: ${memory.testSummary.lastError}` : ''}`,
+      })
+      continue
+    }
+
+    if (
+      memory.channelStatus !== undefined &&
+      memory.channelStatus !== CHANNEL_STATUS_ENABLED &&
+      memory.testSummary.lastStatus === 'success'
+    ) {
+      rawActions.push({
+        action: 'update_channel',
+        target: memory.channelName || '未命名渠道',
+        channel_id: memory.channelId,
+        channel_name: memory.channelName,
+        risk: 'medium',
+        requires_confirm: true,
+        reason: `active testing observed a successful check while channel status is ${memory.channelStatus}`,
+        payload: { status: CHANNEL_STATUS_ENABLED },
+      })
+    }
+  }
 
   const settings = await loadOpsSettings()
   const client = new NewApiClient(config.newApi)
@@ -872,7 +894,10 @@ export async function buildActiveTestActionDrafts(
     drafts.push(updateAction(checked, {
       status: 'pending_confirmation',
       requiresConfirm: true,
-      statusReason: 'active testing reached failure threshold',
+      statusReason:
+        checked.action === 'update_channel'
+          ? 'active testing observed disabled channel recovery'
+          : 'active testing reached failure threshold',
     }))
   }
 
