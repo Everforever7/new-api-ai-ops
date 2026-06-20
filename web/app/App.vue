@@ -14,6 +14,7 @@ import {
   executeAction as requestExecuteAction,
   fetchLlmModels as requestFetchLlmModels,
   getAssistantSession,
+  getChannelMemories,
   getChannels,
   getActions,
   getSettings,
@@ -21,6 +22,8 @@ import {
   rejectAction as requestRejectAction,
   getStatus,
   runCheck as requestRunCheck,
+  runChannelTests as requestRunChannelTests,
+  saveChannelMemory as requestSaveChannelMemory,
   saveSettings as requestSaveSettings,
   resetAssistantSession as requestResetAssistantSession,
   streamAssistantMessage as requestStreamAssistantMessage,
@@ -51,6 +54,7 @@ const isLoggedIn = ref(false)
 const activeTab = ref('dashboard')
 const status = ref(null)
 const channels = ref([])
+const channelMemories = ref([])
 const settings = ref(null)
 const actions = ref([])
 const errorToasts = ref([])
@@ -68,6 +72,9 @@ const assistantResetting = ref(false)
 const llmModels = ref([])
 const llmModelsLoading = ref(false)
 const protectedSavingIds = ref([])
+const testingChannelIds = ref([])
+const testingAllChannels = ref(false)
+const memorySavingIds = ref([])
 
 const tabs = computed(() => [
   { id: 'dashboard', label: t('tabs.dashboard'), icon: LayoutDashboard },
@@ -95,7 +102,7 @@ const slowestChannelText = computed(() => {
   if (!channel) return t('dashboard.allFast')
 
   return t('dashboard.slowestChannel', {
-    id: channel.id,
+    name: channel.name || t('channels.unnamed'),
     time: formatNumber(channel.responseTimeMs),
   })
 })
@@ -112,6 +119,12 @@ const runState = computed(() => {
 
 const currentTabName = computed(() => {
   return tabs.value.find(t => t.id === activeTab.value)?.label || ''
+})
+
+const channelMemoryById = computed(() => {
+  return Object.fromEntries(
+    channelMemories.value.map((memory) => [String(memory.channelId), memory])
+  )
 })
 
 watch(
@@ -144,6 +157,9 @@ watch(activeTab, (nextTab) => {
   }
   if (nextTab === 'actions') {
     loadActions()
+  }
+  if (nextTab === 'channels') {
+    loadChannelMemories()
   }
 })
 
@@ -387,9 +403,10 @@ async function refreshAll(options = {}) {
   refreshing.value = true
   try {
     const statusRequest = initialStatus ? Promise.resolve(initialStatus) : getStatus()
-    const [statusResult, channelsResult] = await Promise.allSettled([
+    const [statusResult, channelsResult, memoriesResult] = await Promise.allSettled([
       statusRequest,
       getChannels(),
+      getChannelMemories(),
     ])
 
     if (statusResult.status === 'fulfilled') {
@@ -406,6 +423,15 @@ async function refreshAll(options = {}) {
     } else {
       channels.value = []
       notifyError('errors.channelsLoadFailed', channelsResult.reason)
+    }
+
+    if (memoriesResult.status === 'fulfilled') {
+      channelMemories.value = Array.isArray(memoriesResult.value)
+        ? memoriesResult.value
+        : []
+    } else {
+      channelMemories.value = []
+      notifyError('errors.channelMemoryLoadFailed', memoriesResult.reason)
     }
   } finally {
     refreshing.value = false
@@ -444,6 +470,15 @@ async function loadActions() {
     notifyError('errors.actionsLoadFailed', error)
   } finally {
     actionsLoading.value = false
+  }
+}
+
+async function loadChannelMemories() {
+  try {
+    const result = await getChannelMemories()
+    channelMemories.value = Array.isArray(result) ? result : []
+  } catch (error) {
+    notifyError('errors.channelMemoryLoadFailed', error)
   }
 }
 
@@ -548,6 +583,58 @@ async function toggleProtectedChannel(channelId) {
   }
 }
 
+async function refreshAfterChannelTests() {
+  await Promise.allSettled([
+    loadChannelMemories(),
+    loadActions(),
+  ])
+}
+
+async function testChannel(channelId) {
+  const id = Number(channelId)
+  if (!Number.isInteger(id)) return
+
+  testingChannelIds.value = [...new Set([...testingChannelIds.value, id])]
+  try {
+    await requestRunChannelTests({ channelIds: [id] })
+    await refreshAfterChannelTests()
+  } catch (error) {
+    notifyError('errors.channelTestRunFailed', error)
+  } finally {
+    testingChannelIds.value = testingChannelIds.value.filter((item) => item !== id)
+  }
+}
+
+async function testEnabledChannels() {
+  testingAllChannels.value = true
+  try {
+    await requestRunChannelTests({})
+    await refreshAfterChannelTests()
+  } catch (error) {
+    notifyError('errors.channelTestRunFailed', error)
+  } finally {
+    testingAllChannels.value = false
+  }
+}
+
+async function saveChannelNote(payload) {
+  const id = Number(payload?.channelId)
+  if (!Number.isInteger(id)) return
+
+  memorySavingIds.value = [...new Set([...memorySavingIds.value, id])]
+  try {
+    const memory = await requestSaveChannelMemory(id, {
+      manualNote: payload.manualNote || '',
+    })
+    const others = channelMemories.value.filter((item) => item.channelId !== id)
+    channelMemories.value = [...others, memory].sort((a, b) => a.channelId - b.channelId)
+  } catch (error) {
+    notifyError('errors.channelMemorySaveFailed', error)
+  } finally {
+    memorySavingIds.value = memorySavingIds.value.filter((item) => item !== id)
+  }
+}
+
 async function executeAction(actionId) {
   executingActionIds.value = [...new Set([...executingActionIds.value, actionId])]
   try {
@@ -613,6 +700,7 @@ function loadInitialData(initialStatus = null) {
 function resetAuthenticatedState() {
   status.value = null
   channels.value = []
+  channelMemories.value = []
   settings.value = null
   actions.value = []
   errorToasts.value = []
@@ -630,6 +718,9 @@ function resetAuthenticatedState() {
   llmModels.value = []
   llmModelsLoading.value = false
   protectedSavingIds.value = []
+  testingChannelIds.value = []
+  testingAllChannels.value = false
+  memorySavingIds.value = []
 }
 
 function handleUnauthorized() {
@@ -707,12 +798,21 @@ onBeforeUnmount(() => {
           v-else-if="activeTab === 'channels'" 
           key="channels"
           :channels="channels"
+          :channelMemories="channelMemoryById"
           :settings="settings"
           :protectedSavingIds="protectedSavingIds"
+          :testingChannelIds="testingChannelIds"
+          :testingAllChannels="testingAllChannels"
+          :memorySavingIds="memorySavingIds"
           :t="t"
           :formatBalance="formatBalance"
           :formatLatency="formatLatency"
+          :formatDate="formatDate"
+          :formatPercent="formatPercent"
           @toggleProtectedChannel="toggleProtectedChannel"
+          @testChannel="testChannel"
+          @testEnabledChannels="testEnabledChannels"
+          @saveChannelNote="saveChannelNote"
         />
 
         <ActionsPanel

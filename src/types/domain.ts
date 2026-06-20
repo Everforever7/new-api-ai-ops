@@ -79,6 +79,56 @@ export type ProposedAction = {
   reason: string
 }
 
+export type ChannelTestRun = {
+  id: string
+  channelId: number
+  channelName?: string
+  model?: string
+  status: 'success' | 'failed'
+  latencyMs?: number
+  error?: string
+  responseSummary?: string
+  triggeredBy: 'manual' | 'scheduled' | 'action'
+  startedAt: string
+  endedAt: string
+}
+
+export type ChannelMemory = {
+  channelId: number
+  channelName?: string
+  manualNote: string
+  aiObservation: string
+  protected: boolean
+  testSummary: {
+    total: number
+    success: number
+    failed: number
+    successRate: number
+    consecutiveFailures: number
+    lastStatus?: ChannelTestRun['status']
+    lastLatencyMs?: number
+    lastError?: string
+    lastModel?: string
+    lastTestedAt?: string
+  }
+  updatedAt: string
+}
+
+export type ChannelMemoryPromptItem = {
+  channelId: number
+  channelName?: string
+  manualNote?: string
+  aiObservation?: string
+  protected: boolean
+  successRate: number
+  consecutiveFailures: number
+  lastStatus?: ChannelTestRun['status']
+  lastLatencyMs?: number
+  lastError?: string
+  lastModel?: string
+  lastTestedAt?: string
+}
+
 export type HealthSnapshot = {
   generatedAt: string
   window: {

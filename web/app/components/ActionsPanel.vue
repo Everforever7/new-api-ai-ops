@@ -38,6 +38,12 @@ function statusClass(status) {
 function isExecuting(actionId) {
   return props.executingActionIds.includes(actionId)
 }
+
+function actionTarget(action) {
+  if (action.channelName) return action.channelName
+  if (action.target && !/^channel:\d+$/i.test(action.target)) return action.target
+  return props.t('actions.noTarget')
+}
 </script>
 
 <template>
@@ -95,7 +101,7 @@ function isExecuting(actionId) {
                   <div>
                     <div class="action-title">{{ actionLabel(action) }}</div>
                     <div class="action-subtitle">
-                      {{ action.target || t('actions.noTarget') }}
+                      {{ actionTarget(action) }}
                     </div>
                   </div>
                 </div>

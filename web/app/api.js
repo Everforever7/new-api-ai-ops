@@ -275,3 +275,33 @@ export function fetchLlmModels(llm) {
     body: JSON.stringify({ llm }),
   })
 }
+
+export function runChannelTests(options = {}) {
+  return api('/api/tests/run', {
+    method: 'POST',
+    body: JSON.stringify(options),
+  })
+}
+
+export function getChannelTestHistory(options = {}) {
+  const params = new URLSearchParams()
+  if (options.channelId) params.set('channelId', String(options.channelId))
+  if (options.limit) params.set('limit', String(options.limit))
+  const query = params.toString()
+  return api(`/api/tests/history${query ? `?${query}` : ''}`)
+}
+
+export function getChannelMemories() {
+  return api('/api/channel-memory')
+}
+
+export function getChannelMemory(channelId) {
+  return api(`/api/channel-memory/${encodeURIComponent(channelId)}`)
+}
+
+export function saveChannelMemory(channelId, memory) {
+  return api(`/api/channel-memory/${encodeURIComponent(channelId)}`, {
+    method: 'PUT',
+    body: JSON.stringify(memory),
+  })
+}

@@ -24,6 +24,7 @@ const messagesEnd = ref(null)
 
 const messages = computed(() => props.session?.messages || [])
 const lastActions = computed(() => props.session?.lastActions || [])
+const memorySummary = computed(() => props.session?.lastMemorySummary || [])
 const canSend = computed(() => draft.value.trim().length > 0 && !props.sending)
 
 function scrollMessagesToEnd() {
@@ -53,6 +54,12 @@ function actionLabel(action) {
   return props.t(`actions.labels.${action.action}`)
 }
 
+function actionTarget(action) {
+  if (action.channelName) return action.channelName
+  if (action.target && !/^channel:\d+$/i.test(action.target)) return action.target
+  return props.t('actions.noTarget')
+}
+
 function statusLabel(action) {
   return props.t(`actions.status.${action.status}`)
 }
@@ -67,6 +74,38 @@ function formatPayload(payload) {
 
 function isPendingAssistantMessage(item) {
   return item.role === 'assistant' && !item.content && props.sending
+}
+
+function memoryStatusClass(memory) {
+  if (memory.lastStatus === 'success') return 'ok'
+  if (memory.lastStatus === 'failed') return 'danger'
+  return 'warn'
+}
+
+function memoryStatusLabel(memory) {
+  if (memory.lastStatus === 'success') return props.t('assistant.memorySuccess')
+  if (memory.lastStatus === 'failed') return props.t('assistant.memoryFailed')
+  return props.t('assistant.memoryUnknown')
+}
+
+function memoryMeta(memory) {
+  const parts = []
+  if (typeof memory.successRate === 'number') {
+    parts.push(`${Math.round(memory.successRate * 100)}%`)
+  }
+  if (memory.consecutiveFailures) {
+    parts.push(props.t('assistant.memoryFailures', {
+      count: memory.consecutiveFailures,
+    }))
+  }
+  if (memory.protected) {
+    parts.push(props.t('assistant.memoryProtected'))
+  }
+  return parts.join(' · ') || props.t('common.emptyValue')
+}
+
+function memoryName(memory) {
+  return memory.channelName || props.t('channels.unnamed')
 }
 </script>
 
@@ -175,6 +214,35 @@ function isPendingAssistantMessage(item) {
 
           <aside class="assistant-actions">
             <div class="assistant-actions-title">
+              <Sparkles :size="18" />
+              <span>{{ t('assistant.memoryTitle') }}</span>
+            </div>
+
+            <div v-if="!memorySummary.length" class="assistant-action-empty">
+              {{ t('assistant.noMemory') }}
+            </div>
+
+            <div v-else class="assistant-memory-list">
+              <article
+                v-for="memory in memorySummary.slice(0, 5)"
+                :key="memory.channelId"
+                class="assistant-memory-item"
+              >
+                <div class="assistant-action-top">
+                  <strong>{{ memoryName(memory) }}</strong>
+                  <span class="status-pill compact" :class="memoryStatusClass(memory)">
+                    <span class="status-dot"></span>
+                    {{ memoryStatusLabel(memory) }}
+                  </span>
+                </div>
+                <p>{{ memory.manualNote || memory.aiObservation || t('assistant.noMemoryText') }}</p>
+                <div class="assistant-action-meta">
+                  <span>{{ memoryMeta(memory) }}</span>
+                </div>
+              </article>
+            </div>
+
+            <div class="assistant-actions-title">
               <ClipboardList :size="18" />
               <span>{{ t('assistant.actionsTitle') }}</span>
             </div>
@@ -199,7 +267,7 @@ function isPendingAssistantMessage(item) {
                 <p>{{ action.reason }}</p>
                 <div class="assistant-action-meta">
                   <span>{{ riskLabel(action) }}</span>
-                  <span>{{ action.target || t('actions.noTarget') }}</span>
+                  <span>{{ actionTarget(action) }}</span>
                 </div>
                 <pre v-if="action.payload" class="minimal-pre assistant-action-payload">{{
                   formatPayload(action.payload)

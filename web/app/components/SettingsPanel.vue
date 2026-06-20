@@ -6,6 +6,7 @@ import {
   Brain,
   Check,
   Edit3,
+  FlaskConical,
   Gauge,
   KeyRound,
   ListChecks,
@@ -131,6 +132,11 @@ const settingsTabs = computed(() => [
     id: 'prompt',
     icon: Brain,
     label: props.t('settings.prompt.title'),
+  },
+  {
+    id: 'activeTesting',
+    icon: FlaskConical,
+    label: props.t('settings.activeTesting.title'),
   },
   {
     id: 'llm',
@@ -499,6 +505,88 @@ function logout() {
               <div class="settings-core-note">
                 <Lock :size="16" />
                 <span>{{ t('settings.prompt.coreSafetyHint') }}</span>
+              </div>
+            </div>
+          </div>
+
+          <div
+            v-else-if="activeSettingsTab === 'activeTesting'"
+            class="settings-stack"
+            role="tabpanel"
+          >
+            <div class="settings-control-row">
+              <div class="settings-inline-main">
+                <div class="bento-label">{{ t('settings.activeTesting.enabled') }}</div>
+                <div class="bento-sub">{{ t('settings.activeTesting.enabledHint') }}</div>
+              </div>
+              <button
+                class="setting-switch"
+                :class="{ active: settingValue('activeTesting.enabled') }"
+                type="button"
+                :aria-pressed="settingValue('activeTesting.enabled')"
+                @click="update('activeTesting.enabled', !settingValue('activeTesting.enabled'))"
+              >
+                {{
+                  settingValue('activeTesting.enabled')
+                    ? t('settings.on')
+                    : t('settings.off')
+                }}
+              </button>
+            </div>
+
+            <div class="settings-section">
+              <div class="settings-section-title">
+                <FlaskConical :size="18" />
+                <span>{{ t('settings.activeTesting.policyTitle') }}</span>
+              </div>
+              <div class="settings-number-grid active-testing-grid">
+                <label class="settings-field">
+                  <span>{{ t('settings.activeTesting.intervalMinutes') }}</span>
+                  <input
+                    type="number"
+                    min="1"
+                    :value="settingValue('activeTesting.intervalMinutes')"
+                    @input="update('activeTesting.intervalMinutes', Number($event.target.value))"
+                  />
+                </label>
+                <label class="settings-field">
+                  <span>{{ t('settings.activeTesting.concurrency') }}</span>
+                  <input
+                    type="number"
+                    min="1"
+                    :value="settingValue('activeTesting.concurrency')"
+                    @input="update('activeTesting.concurrency', Number($event.target.value))"
+                  />
+                </label>
+                <label class="settings-field">
+                  <span>{{ t('settings.activeTesting.failureThreshold') }}</span>
+                  <input
+                    type="number"
+                    min="1"
+                    :value="settingValue('activeTesting.failureThreshold')"
+                    @input="update('activeTesting.failureThreshold', Number($event.target.value))"
+                  />
+                </label>
+                <label class="settings-field">
+                  <span>{{ t('settings.activeTesting.retentionDays') }}</span>
+                  <input
+                    type="number"
+                    min="1"
+                    :value="settingValue('activeTesting.retentionDays')"
+                    @input="update('activeTesting.retentionDays', Number($event.target.value))"
+                  />
+                </label>
+                <label class="settings-field active-testing-model-field">
+                  <span>{{ t('settings.activeTesting.defaultModel') }}</span>
+                  <input
+                    type="text"
+                    autocomplete="off"
+                    :placeholder="t('settings.activeTesting.defaultModelPlaceholder')"
+                    :value="settingValue('activeTesting.defaultModel')"
+                    @input="update('activeTesting.defaultModel', $event.target.value)"
+                  />
+                  <small>{{ t('settings.activeTesting.defaultModelHint') }}</small>
+                </label>
               </div>
             </div>
           </div>

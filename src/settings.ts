@@ -51,6 +51,14 @@ export type OpsSettings = {
       types: number[]
     }
   }
+  activeTesting: {
+    enabled: boolean
+    intervalMinutes: number
+    concurrency: number
+    defaultModel: string
+    failureThreshold: number
+    retentionDays: number
+  }
 }
 
 export type PublicOpsSettings = Omit<OpsSettings, 'llm'> & {
@@ -82,8 +90,8 @@ const DEFAULT_SETTINGS: OpsSettings = {
     customInstructions: '',
     assistantInstructions: [
       '创建渠道动作格式: {"action":"create_channel","target":"渠道名称","risk":"medium","requires_confirm":true,"reason":"原因","payload":{"mode":"single","channel":{"name":"名称","type":1,"key":"[API_KEY_1]","base_url":"https://...","models":"model-a,model-b","group":"default","priority":0,"weight":0,"remark":"可选备注"}}}',
-      '测试渠道动作格式: {"action":"test_channel","target":"channel:12","channel_id":12,"risk":"low","requires_confirm":true,"reason":"原因","payload":{"model":"可选模型"}}。',
-      '更新备注动作格式: {"action":"update_channel","target":"channel:12","channel_id":12,"risk":"medium","requires_confirm":true,"reason":"原因","payload":{"remark":"备注内容"}}。',
+      '测试渠道动作格式: {"action":"test_channel","target":"渠道名称","channel_id":12,"channel_name":"渠道名称","risk":"low","requires_confirm":true,"reason":"原因","payload":{"model":"可选模型"}}。',
+      '更新备注动作格式: {"action":"update_channel","target":"渠道名称","channel_id":12,"channel_name":"渠道名称","risk":"medium","requires_confirm":true,"reason":"原因","payload":{"remark":"备注内容"}}。',
       '创建渠道必须有 base_url、key、models；如果缺字段，只追问，不要编造，也不要生成 create_channel。',
       '模型名没有固定前缀，mimo-v2.5-pro、mimo-v2.5、provider/model、custom-001 都可能是合法模型。用户在“模型/支持模型/models”附近给出的逗号、顿号、空格分隔值都应视作模型列表。',
       '输入里的密钥、Authorization、Cookie 会以 [API_KEY_1] 这类占位符出现；create_channel 的 payload.channel.key 必须使用密钥占位符，例如 [API_KEY_1]。',
@@ -120,6 +128,14 @@ const DEFAULT_SETTINGS: OpsSettings = {
       modelIncludes: [],
       types: [],
     },
+  },
+  activeTesting: {
+    enabled: false,
+    intervalMinutes: 30,
+    concurrency: 2,
+    defaultModel: '',
+    failureThreshold: 3,
+    retentionDays: 30,
   },
 }
 
@@ -252,6 +268,7 @@ export function normalizeOpsSettings(
   const confirmation = readRecord(aiExecution, 'confirmation')
   const safety = readRecord(aiExecution, 'safety')
   const protectedChannels = readRecord(aiExecution, 'protectedChannels')
+  const activeTesting = readRecord(root, 'activeTesting')
 
   const nextApiKey = readText(llm, 'apiKey', '', 20_000)
   const clearApiKey = readBoolean(llm, 'clearApiKey', false)
@@ -410,6 +427,47 @@ export function normalizeOpsSettings(
         modelIncludes: [],
         types: [],
       },
+    },
+    activeTesting: {
+      enabled: readBoolean(
+        activeTesting,
+        'enabled',
+        defaults.activeTesting.enabled
+      ),
+      intervalMinutes: readNumber(
+        activeTesting,
+        'intervalMinutes',
+        defaults.activeTesting.intervalMinutes,
+        1,
+        10_080
+      ),
+      concurrency: readNumber(
+        activeTesting,
+        'concurrency',
+        defaults.activeTesting.concurrency,
+        1,
+        20
+      ),
+      defaultModel: readText(
+        activeTesting,
+        'defaultModel',
+        defaults.activeTesting.defaultModel,
+        200
+      ),
+      failureThreshold: readNumber(
+        activeTesting,
+        'failureThreshold',
+        defaults.activeTesting.failureThreshold,
+        1,
+        100
+      ),
+      retentionDays: readNumber(
+        activeTesting,
+        'retentionDays',
+        defaults.activeTesting.retentionDays,
+        1,
+        3650
+      ),
     },
   }
 }

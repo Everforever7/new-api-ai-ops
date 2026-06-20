@@ -10,6 +10,12 @@ import {
   loadPublicOpsSettings,
   savePublicOpsSettings,
 } from '../settings'
+import {
+  getChannelMemory,
+  getChannelTestHistory,
+  listChannelMemories,
+  saveChannelMemory,
+} from '../testing'
 
 type JsonValue = Record<string, unknown> | unknown[]
 
@@ -173,6 +179,16 @@ function readModelId(value: unknown) {
   return typeof id === 'string' ? id.trim() : ''
 }
 
+function readNumberList(value: unknown) {
+  return [
+    ...new Set(
+      (Array.isArray(value) ? value : [])
+        .map(Number)
+        .filter((item) => Number.isInteger(item) && item > 0)
+    ),
+  ]
+}
+
 async function fetchLlmModels(config: AppConfig, input: unknown) {
   const effective = await loadEffectiveLlmConfig(config)
   const llm = isRecord(input) ? isRecord(input.llm) ? input.llm : input : {}
@@ -266,7 +282,9 @@ async function handleApi(
       const body = await req.json().catch(() => {
         throw new Error('invalid settings JSON')
       })
-      return json(await savePublicOpsSettings(body, config))
+      const saved = await savePublicOpsSettings(body, config)
+      await runtime.refreshActiveTestingScheduler()
+      return json(saved)
     }
 
     if (url.pathname === '/api/llm/models' && req.method === 'POST') {
@@ -276,6 +294,47 @@ async function handleApi(
 
     if (url.pathname === '/api/actions' && req.method === 'GET') {
       return json(runtime.getActions())
+    }
+
+    if (url.pathname === '/api/tests/run' && req.method === 'POST') {
+      const body = await req.json().catch(() => ({}))
+      const input = isRecord(body) ? body : {}
+      return json(
+        await runtime.runChannelTests({
+          channelIds: readNumberList(input.channelIds),
+          model: typeof input.model === 'string' ? input.model : undefined,
+          triggeredBy: 'manual',
+        })
+      )
+    }
+
+    if (url.pathname === '/api/tests/history' && req.method === 'GET') {
+      const channelId = Number(url.searchParams.get('channelId') || '')
+      const limit = Number(url.searchParams.get('limit') || '')
+      return json(
+        await getChannelTestHistory({
+          channelId: Number.isInteger(channelId) && channelId > 0
+            ? channelId
+            : undefined,
+          limit: Number.isInteger(limit) && limit > 0 ? limit : undefined,
+        })
+      )
+    }
+
+    if (url.pathname === '/api/channel-memory' && req.method === 'GET') {
+      return json(await listChannelMemories())
+    }
+
+    const memoryMatch = url.pathname.match(/^\/api\/channel-memory\/(\d+)$/)
+    if (memoryMatch && req.method === 'GET') {
+      return json(await getChannelMemory(Number(memoryMatch[1])))
+    }
+
+    if (memoryMatch && req.method === 'PUT') {
+      const body = await req.json().catch(() => {
+        throw new Error('invalid channel memory JSON')
+      })
+      return json(await saveChannelMemory(Number(memoryMatch[1]), body))
     }
 
     if (url.pathname === '/api/assistant/session' && req.method === 'GET') {

@@ -2,6 +2,7 @@ import type { AppConfig } from '../config'
 import type { HealthSnapshot } from '../types/domain'
 import { loadEffectiveLlmConfig, loadOpsSettings } from '../settings'
 import { buildOpsPrompt, buildRuleBasedReport } from './prompts'
+import { getChannelMemoryPromptSummary } from '../testing'
 
 type ChatMessage = {
   role: 'system' | 'user' | 'assistant'
@@ -22,6 +23,7 @@ export async function generateOpsReport(
 ) {
   const settings = await loadOpsSettings()
   const llm = await loadEffectiveLlmConfig(config)
+  const channelMemorySummary = await getChannelMemoryPromptSummary()
   const promptOptions = {
     includeChannelSummary: settings.prompt.includeChannelSummary,
     includeErrors: settings.prompt.includeErrors,
@@ -32,7 +34,7 @@ export async function generateOpsReport(
   }
 
   if (!llm.apiKey) {
-    return buildRuleBasedReport(snapshot, promptOptions)
+    return buildRuleBasedReport(snapshot, promptOptions, channelMemorySummary)
   }
 
   const response = await fetch(`${llm.baseUrl}/chat/completions`, {
@@ -43,7 +45,11 @@ export async function generateOpsReport(
     },
     body: JSON.stringify({
       model: llm.model,
-      messages: buildOpsPrompt(snapshot, promptOptions) satisfies ChatMessage[],
+      messages: buildOpsPrompt(
+        snapshot,
+        promptOptions,
+        channelMemorySummary
+      ) satisfies ChatMessage[],
       temperature: llm.temperature,
     }),
   })

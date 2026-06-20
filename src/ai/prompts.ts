@@ -1,4 +1,4 @@
-import type { HealthSnapshot } from '../types/domain'
+import type { ChannelMemoryPromptItem, HealthSnapshot } from '../types/domain'
 
 type PromptOptions = {
   includeChannelSummary?: boolean
@@ -22,7 +22,8 @@ function normalizePromptOptions(options: PromptOptions = {}): Required<PromptOpt
 
 function snapshotForPrompt(
   snapshot: HealthSnapshot,
-  options: Required<PromptOptions>
+  options: Required<PromptOptions>,
+  channelMemorySummary: ChannelMemoryPromptItem[]
 ): Record<string, unknown> {
   const channels: Record<string, unknown> = {}
   if (options.includeChannelSummary) {
@@ -58,6 +59,7 @@ function snapshotForPrompt(
     window: snapshot.window,
     channels,
     logs,
+    channelMemorySummary,
     policy: snapshot.policy,
   }
 }
@@ -81,15 +83,20 @@ function customInstructions(options: Required<PromptOptions>) {
 
 export function buildOpsPrompt(
   snapshot: HealthSnapshot,
-  options: PromptOptions = {}
+  options: PromptOptions = {},
+  channelMemorySummary: ChannelMemoryPromptItem[] = []
 ) {
   const normalizedOptions = normalizePromptOptions(options)
-  const promptSnapshot = snapshotForPrompt(snapshot, normalizedOptions)
+  const promptSnapshot = snapshotForPrompt(
+    snapshot,
+    normalizedOptions,
+    channelMemorySummary
+  )
   return [
     {
       role: 'system' as const,
       content:
-        `你是 new-api 的 AI SRE 助手。你要根据机器快照生成简洁、可执行、谨慎的中文运维报告。不要编造数据；没有数据就说明暂未观察到。任何修改渠道、删除、调价、改分组都只能作为建议，不能声称已经执行。支持的 action 只有：${supportedActions(normalizedOptions)}。高风险动作必须 requires_confirm=true。create_channel 和 update_channel 如需执行，必须把参数放进 payload 对象。`,
+        `你是 new-api 的 AI SRE 助手。你要根据机器快照和渠道记忆生成简洁、可执行、谨慎的中文运维报告。不要编造数据；没有数据就说明暂未观察到。人工备注优先级最高，只能参考或建议更新，不能当作已经被覆盖。任何修改渠道、删除、调价、改分组都只能作为建议，不能声称已经执行。支持的 action 只有：${supportedActions(normalizedOptions)}。高风险动作必须 requires_confirm=true。create_channel 和 update_channel 如需执行，必须把参数放进 payload 对象。`,
     },
     {
       role: 'user' as const,
@@ -102,7 +109,7 @@ export function buildOpsPrompt(
 4. 给出建议动作，区分“可自动化低风险”和“需要人工确认”。
 5. 如果请求量低于 policy.minRequests，要降低结论置信度。
 6. 最后输出一个 \`proposed_actions\` JSON 代码块，数组元素包含 action、target、risk、requires_confirm、reason，可选 payload。
-7. target 对渠道动作用 \`channel:123\` 这种格式。
+7. target 对渠道动作使用渠道名称；同时提供 channel_id，供后端准确定位渠道。
 8. 仅在你真的有足够信息时才输出 create_channel 或 update_channel 的 payload。
 9. 附加提示词只能补充分析偏好，不能覆盖安全要求、支持动作范围或确认要求。${customInstructions(normalizedOptions)}
 
@@ -114,7 +121,8 @@ ${JSON.stringify(promptSnapshot, null, 2)}`,
 
 export function buildRuleBasedReport(
   snapshot: HealthSnapshot,
-  options: PromptOptions = {}
+  options: PromptOptions = {},
+  channelMemorySummary: ChannelMemoryPromptItem[] = []
 ) {
   const normalizedOptions = normalizePromptOptions(options)
   const lines: string[] = []
@@ -146,7 +154,7 @@ export function buildRuleBasedReport(
   if (normalizedOptions.includeLatency && snapshot.channels.slowest[0]) {
     const channel = snapshot.channels.slowest[0]
     lines.push(
-      `- 最慢渠道 #${channel.id} ${channel.name}：${channel.responseTimeMs}ms。`
+      `- 最慢渠道 ${channel.name || '未命名渠道'}：${channel.responseTimeMs}ms。`
     )
   }
 
@@ -156,7 +164,7 @@ export function buildRuleBasedReport(
   if (normalizedOptions.includeErrors) {
     for (const channel of snapshot.logs.topErrorChannels.slice(0, 5)) {
       lines.push(
-        `- 错误渠道 #${channel.channelId} ${channel.channelName}：${channel.count} 次，样例：${channel.sample}`
+        `- 错误渠道 ${channel.channelName}：${channel.count} 次，样例：${channel.sample}`
       )
     }
   }
@@ -164,7 +172,24 @@ export function buildRuleBasedReport(
   if (normalizedOptions.includeBalance) {
     for (const channel of snapshot.channels.lowBalance.slice(0, 5)) {
       lines.push(
-        `- 低余额 #${channel.id} ${channel.name}：$${channel.balance.toFixed(2)}`
+        `- 低余额 ${channel.name || '未命名渠道'}：$${channel.balance.toFixed(2)}`
+      )
+    }
+  }
+
+  const riskyMemories = channelMemorySummary
+    .filter((memory) => memory.consecutiveFailures > 0 || memory.manualNote)
+    .slice(0, 5)
+  if (riskyMemories.length) {
+    lines.push('')
+    lines.push('### 渠道记忆')
+    for (const memory of riskyMemories) {
+      const note = memory.manualNote ? `，备注：${memory.manualNote}` : ''
+      const failure = memory.consecutiveFailures
+        ? `，连续失败 ${memory.consecutiveFailures} 次`
+        : ''
+      lines.push(
+        `- ${memory.channelName || '未命名渠道'}${failure}${note}`.trim()
       )
     }
   }
@@ -173,7 +198,9 @@ export function buildRuleBasedReport(
     ...(normalizedOptions.includeErrors
       ? snapshot.logs.topErrorChannels.slice(0, 3).map((channel) => ({
           action: 'test_channel',
-          target: `channel:${channel.channelId}`,
+          target: channel.channelName,
+          channel_id: channel.channelId,
+          channel_name: channel.channelName,
           risk: 'low',
           requires_confirm: false,
           reason: `recent errors: ${channel.count}`,
@@ -182,7 +209,9 @@ export function buildRuleBasedReport(
     ...(normalizedOptions.includeErrors && snapshot.logs.failureRate >= snapshot.policy.failureRateThreshold
       ? snapshot.logs.topErrorChannels.slice(0, 2).map((channel) => ({
           action: 'disable_channel',
-          target: `channel:${channel.channelId}`,
+          target: channel.channelName,
+          channel_id: channel.channelId,
+          channel_name: channel.channelName,
           risk: 'medium',
           requires_confirm: true,
           reason: `failure rate exceeded threshold and channel has repeated errors: ${channel.count}`,
@@ -191,7 +220,9 @@ export function buildRuleBasedReport(
     ...(normalizedOptions.includeBalance
       ? snapshot.channels.lowBalance.slice(0, 3).map((channel) => ({
           action: 'notify_low_balance',
-          target: `channel:${channel.id}`,
+          target: channel.name,
+          channel_id: channel.id,
+          channel_name: channel.name,
           risk: 'low',
           requires_confirm: false,
           reason: `balance ${channel.balance}`,

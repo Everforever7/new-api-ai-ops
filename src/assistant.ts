@@ -1,6 +1,8 @@
 import type { AppConfig } from './config'
 import type { RawAction } from './actions'
 import { loadEffectiveLlmConfig, loadOpsSettings } from './settings'
+import { getChannelMemoryPromptSummary } from './testing'
+import type { ChannelMemoryPromptItem } from './types/domain'
 
 export type AssistantMessage = {
   id: string
@@ -15,6 +17,7 @@ export type AssistantTurnPlan = {
   rawActions: RawAction[]
   missingFields: string[]
   secrets: AssistantSecret[]
+  memorySummary: ChannelMemoryPromptItem[]
 }
 
 export type AssistantPreparedTurn = {
@@ -209,12 +212,14 @@ export async function planAssistantResponse(
 ): Promise<AssistantTurnPlan> {
   const llm = await loadEffectiveLlmConfig(config)
   const settings = await loadOpsSettings()
+  const memorySummary = await getChannelMemoryPromptSummary()
   const planned = llm.apiKey
     ? (await planWithLlm(
         llm,
         history,
         prepared.redactedInput,
         settings.prompt.assistantInstructions,
+        memorySummary,
         options
       ).catch(() =>
         assistantUnavailablePlan()
@@ -237,6 +242,7 @@ export async function planAssistantResponse(
     rawActions: finalized.rawActions,
     missingFields: finalized.missingFields,
     secrets: prepared.secrets,
+    memorySummary,
   }
 }
 
@@ -245,9 +251,15 @@ async function planWithLlm(
   history: AssistantMessage[],
   sanitizedInput: string,
   assistantInstructions: string,
+  memorySummary: ChannelMemoryPromptItem[],
   options: AssistantResponseOptions = {}
 ): Promise<AssistantPlan | undefined> {
-  const messages = buildChatMessages(history, sanitizedInput, assistantInstructions)
+  const messages = buildChatMessages(
+    history,
+    sanitizedInput,
+    assistantInstructions,
+    memorySummary
+  )
 
   if (options.onReplyDelta) {
     return planWithLlmStream(llm, messages, options.onReplyDelta)
@@ -276,13 +288,24 @@ async function planWithLlm(
 function buildChatMessages(
   history: AssistantMessage[],
   sanitizedInput: string,
-  assistantInstructions: string
+  assistantInstructions: string,
+  memorySummary: ChannelMemoryPromptItem[]
 ): ChatMessage[] {
+  const memoryMessages: ChatMessage[] = memorySummary.length
+    ? [
+        {
+          role: 'system',
+          content: `渠道记忆摘要（人工备注优先级最高，不能覆盖，只能参考或建议更新）：\n${JSON.stringify(memorySummary, null, 2)}`,
+        },
+      ]
+    : []
+
   return [
     {
       role: 'system',
       content: buildAssistantSystemPrompt(assistantInstructions),
     },
+    ...memoryMessages,
     ...history.slice(-MAX_HISTORY_MESSAGES).map((item) => ({
       role: item.role,
       content: item.content,
@@ -570,7 +593,7 @@ function finalizePlan(plan: AssistantPlan, redacted: RedactionResult): Assistant
       ['test_channel', 'update_channel', 'disable_channel'].includes(action) &&
       !extractRawChannelId(restored)
     ) {
-      missingFields.add('渠道 ID')
+      missingFields.add('渠道名称或可定位信息')
       continue
     }
 

@@ -1,7 +1,7 @@
 import { appendFile, mkdir, readFile } from 'node:fs/promises'
 import { dirname } from 'node:path'
 import type { AppConfig } from './config'
-import type { Channel, HealthSnapshot } from './types/domain'
+import type { Channel, ChannelMemory, HealthSnapshot } from './types/domain'
 import { NewApiClient } from './newapi/client'
 import { loadOpsSettings, type OpsSettings } from './settings'
 
@@ -18,9 +18,10 @@ export type OpsAction = {
   id: string
   action: string
   rawAction: string
-  source?: 'report' | 'assistant'
+  source?: 'report' | 'assistant' | 'active_test'
   target?: string
   channelId?: number
+  channelName?: string
   risk: 'low' | 'medium' | 'high'
   requiresConfirm: boolean
   reason: string
@@ -45,6 +46,8 @@ export type RawAction = {
   channel?: unknown
   channel_id?: unknown
   channelId?: unknown
+  channel_name?: unknown
+  channelName?: unknown
   changes?: unknown
   model?: unknown
 }
@@ -212,6 +215,22 @@ function rawPayload(raw: RawAction) {
   return undefined
 }
 
+function readChannelNameFromRaw(raw: RawAction) {
+  const direct = raw.channel_name ?? raw.channelName
+  if (typeof direct === 'string' && direct.trim()) return direct.trim()
+
+  const payload = rawPayload(raw)
+  const payloadChannel = isRecord(payload?.channel) ? payload.channel : payload
+  if (isRecord(payloadChannel) && typeof payloadChannel.name === 'string') {
+    const name = payloadChannel.name.trim()
+    if (name) return name
+  }
+
+  const target =
+    raw.target === undefined || raw.target === null ? '' : String(raw.target).trim()
+  return target && !parseChannelId(target) ? target : undefined
+}
+
 function extractJsonBlocks(report: string) {
   const blocks: string[] = []
   const fencePattern = /```(?:json)?\s*([\s\S]*?)```/gi
@@ -236,7 +255,11 @@ export function createOpsAction(
   source: OpsAction['source'] = 'report'
 ): OpsAction {
   const action = normalizeActionName(raw.action)
-  const target = raw.target === undefined ? undefined : String(raw.target)
+  const channelName = readChannelNameFromRaw(raw)
+  const target =
+    raw.target === undefined
+      ? channelName
+      : String(raw.target)
   const channelId =
     parseChannelId(raw.channel_id) ??
     parseChannelId(raw.channelId) ??
@@ -250,6 +273,7 @@ export function createOpsAction(
     source,
     target,
     channelId,
+    channelName,
     risk: normalizeRisk(raw.risk),
     requiresConfirm:
       raw.requires_confirm === true || raw.requiresConfirm === true,
@@ -353,7 +377,7 @@ function isProtectedChannel(
 ) {
   const rules = settings.aiExecution.protectedChannels
   if (action.channelId !== undefined && rules.ids.includes(action.channelId)) {
-    return 'channel id is protected'
+    return 'channel is protected'
   }
   if (!channel) return undefined
   if (rules.types.includes(channel.type)) return 'channel type is protected'
@@ -460,6 +484,14 @@ function updateAction(
   }
 }
 
+function withChannelIdentity(action: OpsAction, channel?: Channel) {
+  if (!channel?.name) return action
+  return updateAction(action, {
+    channelName: channel.name,
+    target: channel.name,
+  })
+}
+
 export function sanitizeActionForClient(action: OpsAction): OpsAction {
   return redactSensitiveValue(action) as OpsAction
 }
@@ -510,7 +542,7 @@ async function evaluateAction(
   ) {
     return updateAction(action, {
       status: 'blocked',
-      statusReason: `${action.action} requires channel id`,
+      statusReason: `${action.action} requires channel identifier`,
     })
   }
 
@@ -531,7 +563,8 @@ async function evaluateAction(
   }
 
   const channel = await readChannel(client, action.channelId)
-  if (requiresExistingChannel(action.action) && !channel) {
+  const actionWithChannel = withChannelIdentity(action, channel)
+  if (requiresExistingChannel(actionWithChannel.action) && !channel) {
     return updateAction(action, {
       status: 'blocked',
       statusReason: 'channel could not be verified',
@@ -539,40 +572,40 @@ async function evaluateAction(
   }
 
   const protectedReason =
-    action.action === 'test_channel'
+    actionWithChannel.action === 'test_channel'
       ? undefined
-      : isProtectedChannel(action, settings, channel)
+      : isProtectedChannel(actionWithChannel, settings, channel)
   if (protectedReason) {
-    return updateAction(action, {
+    return updateAction(actionWithChannel, {
       status: 'blocked',
       statusReason: protectedReason,
     })
   }
 
-  if (await coolingDown(action, settings)) {
-    return updateAction(action, {
+  if (await coolingDown(actionWithChannel, settings)) {
+    return updateAction(actionWithChannel, {
       status: 'blocked',
       statusReason: 'channel action is cooling down',
     })
   }
 
-  if (mutatesChannel(action.action) && snapshot.logs.total < settings.aiExecution.safety.minRequestsForActions) {
-    return updateAction(action, {
+  if (mutatesChannel(actionWithChannel.action) && snapshot.logs.total < settings.aiExecution.safety.minRequestsForActions) {
+    return updateAction(actionWithChannel, {
       status: 'pending_confirmation',
       requiresConfirm: true,
       statusReason: 'sample size below safety threshold',
     })
   }
 
-  if (strategy === 'confirm' || action.requiresConfirm || action.risk !== 'low') {
-    return updateAction(action, {
+  if (strategy === 'confirm' || actionWithChannel.requiresConfirm || actionWithChannel.risk !== 'low') {
+    return updateAction(actionWithChannel, {
       status: 'pending_confirmation',
       requiresConfirm: true,
       statusReason: 'waiting for manual confirmation',
     })
   }
 
-  return updateAction(action, {
+  return updateAction(actionWithChannel, {
     status: 'queued',
     statusReason: 'ready to execute',
   })
@@ -587,7 +620,7 @@ async function executeWithClient(
   }
 
   if (action.action === 'test_channel') {
-    if (!action.channelId) throw new Error('test_channel requires channel id')
+    if (!action.channelId) throw new Error('test_channel requires channel identifier')
     const model =
       typeof action.payload?.model === 'string'
         ? action.payload.model
@@ -603,20 +636,20 @@ async function executeWithClient(
   }
 
   if (action.action === 'update_channel') {
-    if (!action.channelId) throw new Error('update_channel requires channel id')
+    if (!action.channelId) throw new Error('update_channel requires channel identifier')
     if (!action.payload) throw new Error('update_channel requires payload')
     return client.updateChannel(action.channelId, sanitizeUpdatePayload(action.payload))
   }
 
   if (action.action === 'disable_channel') {
-    if (!action.channelId) throw new Error('disable_channel requires channel id')
+    if (!action.channelId) throw new Error('disable_channel requires channel identifier')
     return client.updateChannel(action.channelId, {
       status: CHANNEL_STATUS_AUTO_DISABLED,
     })
   }
 
   if (action.action === 'delete_channel') {
-    if (!action.channelId) throw new Error('delete_channel requires channel id')
+    if (!action.channelId) throw new Error('delete_channel requires channel identifier')
     return client.deleteChannel(action.channelId)
   }
 
@@ -778,6 +811,51 @@ export async function buildAssistantActionDrafts(
   return drafts
 }
 
+export async function buildActiveTestActionDrafts(
+  config: AppConfig,
+  memories: ChannelMemory[],
+  failureThreshold: number
+) {
+  const rawActions: RawAction[] = memories
+    .filter((memory) => {
+      return (
+        memory.testSummary.lastStatus === 'failed' &&
+        memory.testSummary.consecutiveFailures >= failureThreshold
+      )
+    })
+    .map((memory) => ({
+      action: 'disable_channel',
+      target: memory.channelName || '未命名渠道',
+      channel_id: memory.channelId,
+      channel_name: memory.channelName,
+      risk: 'medium',
+      requires_confirm: true,
+      reason: `active testing observed ${memory.testSummary.consecutiveFailures} consecutive failures${memory.testSummary.lastError ? `: ${memory.testSummary.lastError}` : ''}`,
+    }))
+
+  const settings = await loadOpsSettings()
+  const client = new NewApiClient(config.newApi)
+  const drafts: OpsAction[] = []
+
+  for (const [index, raw] of rawActions.entries()) {
+    const action = createOpsAction(raw, index, 'active_test')
+    const checked = await evaluateManualAction(action, settings, client)
+
+    if (checked.status === 'blocked') {
+      drafts.push(checked)
+      continue
+    }
+
+    drafts.push(updateAction(checked, {
+      status: 'pending_confirmation',
+      requiresConfirm: true,
+      statusReason: 'active testing reached failure threshold',
+    }))
+  }
+
+  return drafts
+}
+
 export async function executeActionNow(config: AppConfig, action: OpsAction) {
   const executing = updateAction(action, { status: 'executing' })
   try {
@@ -861,7 +939,7 @@ async function evaluateManualAction(
   ) {
     return updateAction(action, {
       status: 'blocked',
-      statusReason: `${action.action} requires channel id`,
+      statusReason: `${action.action} requires channel identifier`,
     })
   }
 
@@ -874,7 +952,8 @@ async function evaluateManualAction(
   }
 
   const channel = await readChannel(client, action.channelId)
-  if (requiresExistingChannel(action.action) && !channel) {
+  const actionWithChannel = withChannelIdentity(action, channel)
+  if (requiresExistingChannel(actionWithChannel.action) && !channel) {
     return updateAction(action, {
       status: 'blocked',
       statusReason: 'channel could not be verified',
@@ -890,24 +969,24 @@ async function evaluateManualAction(
   }
 
   const protectedReason =
-    action.action === 'test_channel'
+    actionWithChannel.action === 'test_channel'
       ? undefined
-      : isProtectedChannel(action, settings, channel)
+      : isProtectedChannel(actionWithChannel, settings, channel)
   if (protectedReason) {
-    return updateAction(action, {
+    return updateAction(actionWithChannel, {
       status: 'blocked',
       statusReason: protectedReason,
     })
   }
 
-  if (await coolingDown(action, settings)) {
-    return updateAction(action, {
+  if (await coolingDown(actionWithChannel, settings)) {
+    return updateAction(actionWithChannel, {
       status: 'blocked',
       statusReason: 'channel action is cooling down',
     })
   }
 
-  return action
+  return actionWithChannel
 }
 
 export async function rejectAction(action: OpsAction) {

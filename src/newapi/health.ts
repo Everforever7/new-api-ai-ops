@@ -49,7 +49,7 @@ function buildTopErrorChannels(logs: UsageLog[], channels: Channel[]) {
       channelName:
         channelLogs[0]?.channel_name ||
         channelNameById.get(channelId) ||
-        `#${channelId}`,
+        '未命名渠道',
       count: channelLogs.length,
       sample: contentSample(channelLogs),
     }))

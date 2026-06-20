@@ -6,6 +6,7 @@ import { sendDiscordReport } from './reporters/discord'
 import { saveReport } from './reporters/save'
 import { logger } from './logger'
 import {
+  buildActiveTestActionDrafts,
   buildAssistantActionDrafts,
   buildActionQueue,
   confirmAndExecuteAction,
@@ -21,6 +22,11 @@ import {
   type AssistantSecret,
   type AssistantMessage,
 } from './assistant'
+import { loadOpsSettings } from './settings'
+import {
+  runChannelTests as runChannelTestsNow,
+  type RunChannelTestsOptions,
+} from './testing'
 
 export type AssistantStreamOptions = {
   userMessageId?: string
@@ -54,12 +60,16 @@ export type RunReportResult = {
 
 export class OpsRuntime {
   private running = false
+  private activeTestingRunning = false
+  private activeTestingTimer?: ReturnType<typeof setInterval>
+  private activeTestingScheduleKey = ''
   private lastResult?: RunReportResult
   private lastError?: string
   private actions: OpsAction[] = []
   private assistantMessages: AssistantMessage[] = []
   private assistantSecrets: AssistantSecret[] = []
   private assistantLastActions: OpsAction[] = []
+  private assistantLastMemorySummary: unknown[] = []
   private assistantUpdatedAt?: string
   private readonly startedAt = new Date().toISOString()
 
@@ -75,6 +85,7 @@ export class OpsRuntime {
       lastSnapshot: this.lastResult?.snapshot,
       lastReport: this.lastResult?.report,
       lastActions: this.getActions(),
+      activeTestingRunning: this.activeTestingRunning,
     }
   }
 
@@ -86,6 +97,7 @@ export class OpsRuntime {
     return {
       messages: this.assistantMessages,
       lastActions: this.assistantLastActions.map(sanitizeActionForClient),
+      lastMemorySummary: this.assistantLastMemorySummary,
       updatedAt: this.assistantUpdatedAt,
     }
   }
@@ -94,8 +106,81 @@ export class OpsRuntime {
     this.assistantMessages = []
     this.assistantSecrets = []
     this.assistantLastActions = []
+    this.assistantLastMemorySummary = []
     this.assistantUpdatedAt = new Date().toISOString()
     return this.getAssistantSession()
+  }
+
+  async refreshActiveTestingScheduler() {
+    const settings = await loadOpsSettings()
+    const scheduleKey = JSON.stringify(settings.activeTesting)
+    if (scheduleKey === this.activeTestingScheduleKey) return
+
+    if (this.activeTestingTimer) {
+      clearInterval(this.activeTestingTimer)
+      this.activeTestingTimer = undefined
+    }
+
+    this.activeTestingScheduleKey = scheduleKey
+    if (!settings.activeTesting.enabled) {
+      logger.info('active channel testing disabled')
+      return
+    }
+
+    const intervalMs =
+      Math.max(1, settings.activeTesting.intervalMinutes) * 60 * 1000
+    this.activeTestingTimer = setInterval(() => {
+      void this.runScheduledChannelTests()
+    }, intervalMs)
+    logger.info(
+      `active channel testing scheduled; interval=${settings.activeTesting.intervalMinutes}m`
+    )
+  }
+
+  private async runScheduledChannelTests() {
+    try {
+      await this.runChannelTests({ triggeredBy: 'scheduled' })
+    } catch (error) {
+      logger.error('scheduled channel testing failed', error)
+    }
+  }
+
+  async runChannelTests(options: RunChannelTestsOptions = {}) {
+    if (this.activeTestingRunning) {
+      throw new Error('channel tests are already running')
+    }
+
+    this.activeTestingRunning = true
+    try {
+      const result = await runChannelTestsNow(this.config, options)
+      const settings = await loadOpsSettings()
+      const drafts = await buildActiveTestActionDrafts(
+        this.config,
+        result.memories,
+        settings.activeTesting.failureThreshold
+      )
+      const nextDrafts = drafts.filter((draft) => !this.hasOpenActionLike(draft))
+      this.actions = [...nextDrafts, ...this.actions]
+
+      return {
+        ...result,
+        actions: nextDrafts.map(sanitizeActionForClient),
+      }
+    } finally {
+      this.activeTestingRunning = false
+    }
+  }
+
+  private hasOpenActionLike(action: OpsAction) {
+    return this.actions.some((item) => {
+      return (
+        item.source === 'active_test' &&
+        item.action === action.action &&
+        item.channelId === action.channelId &&
+        item.status !== 'executed' &&
+        item.status !== 'rejected'
+      )
+    })
   }
 
   async sendAssistantMessage(input: string) {
@@ -114,6 +199,7 @@ export class OpsRuntime {
     this.assistantSecrets = plan.secrets
     this.actions = [...drafts, ...this.actions]
     this.assistantLastActions = drafts
+    this.assistantLastMemorySummary = plan.memorySummary
     this.assistantMessages = [
       ...this.assistantMessages,
       plan.userMessage,
@@ -150,6 +236,7 @@ export class OpsRuntime {
     )
 
     this.assistantLastActions = []
+    this.assistantLastMemorySummary = []
     this.assistantMessages = [
       ...this.assistantMessages,
       prepared.userMessage,
@@ -187,6 +274,7 @@ export class OpsRuntime {
     this.assistantSecrets = plan.secrets
     this.actions = [...drafts, ...this.actions]
     this.assistantLastActions = drafts
+    this.assistantLastMemorySummary = plan.memorySummary
     updateAssistantContent(plan.assistantMessage.content)
     this.assistantUpdatedAt = new Date().toISOString()
 
