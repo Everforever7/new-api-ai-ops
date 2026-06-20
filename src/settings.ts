@@ -5,6 +5,14 @@ import { DEFAULT_REPORT_INSTRUCTIONS } from './promptDefaults'
 
 export type ConfirmationStrategy = 'auto' | 'confirm' | 'never'
 
+export type PromptKeywordSnippet = {
+  id: string
+  enabled: boolean
+  name: string
+  keywords: string[]
+  content: string
+}
+
 export type OpsSettings = {
   version: 1
   llm: {
@@ -29,9 +37,11 @@ export type OpsSettings = {
   prompt: {
     reportInstructions: string
     assistantInstructions: string
+    keywordSnippets: PromptKeywordSnippet[]
   }
   report: {
     intervalMinutes: number
+    testBeforeRun: boolean
   }
   aiExecution: {
     enabled: boolean
@@ -126,9 +136,11 @@ const DEFAULT_SETTINGS: OpsSettings = {
       '如果用户分多轮补充信息，你可以结合最近对话上下文生成完整动作；例如上一轮已有 [API_KEY_1] 和 base_url，本轮只补模型时，可以使用 [API_KEY_1]。',
       '回复中要提醒用户到动作队列查看后端策略给出的最终状态。',
     ].join('\n'),
+    keywordSnippets: [],
   },
   report: {
     intervalMinutes: 15,
+    testBeforeRun: true,
   },
   aiExecution: {
     enabled: true,
@@ -291,6 +303,43 @@ function readNumberArray(
   )]
 }
 
+function readKeywordList(value: unknown) {
+  const items =
+    typeof value === 'string'
+      ? value.split(/[\n,，;；]/g)
+      : Array.isArray(value)
+        ? value
+        : []
+
+  return [...new Set(
+    items
+      .map((item) => String(item).trim())
+      .filter(Boolean)
+      .slice(0, 50)
+  )]
+}
+
+function readPromptKeywordSnippets(value: unknown): PromptKeywordSnippet[] {
+  const items = Array.isArray(value) ? value : []
+  return items
+    .filter(isRecord)
+    .slice(0, 100)
+    .map((item, index) => {
+      const id = readText(item, 'id', '', 120) || `snippet-${index + 1}`
+      const name = readText(item, 'name', '', 120)
+      const keywords = readKeywordList(item.keywords)
+      const content = readText(item, 'content', '', 5000)
+      return {
+        id,
+        enabled: readBoolean(item, 'enabled', true),
+        name,
+        keywords,
+        content,
+      }
+    })
+    .filter((item) => item.id || item.name || item.keywords.length || item.content)
+}
+
 export function normalizeOpsSettings(
   input: unknown,
   previous?: OpsSettings
@@ -406,6 +455,7 @@ export function normalizeOpsSettings(
         defaults.prompt.assistantInstructions,
         12_000
       ),
+      keywordSnippets: readPromptKeywordSnippets(prompt.keywordSnippets),
     },
     report: {
       intervalMinutes: readNumber(
@@ -414,6 +464,11 @@ export function normalizeOpsSettings(
         defaults.report.intervalMinutes,
         1,
         10_080
+      ),
+      testBeforeRun: readBoolean(
+        report,
+        'testBeforeRun',
+        defaults.report.testBeforeRun
       ),
     },
     aiExecution: {

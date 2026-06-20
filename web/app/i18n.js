@@ -130,6 +130,7 @@ const dictionaries = {
       historySources: {
         manual: '手动',
         scheduled: '定时',
+        report: '报告',
         action: '动作',
       },
       empty: '暂无数据',
@@ -269,6 +270,8 @@ const dictionaries = {
         scheduleTitle: '报告调度',
         intervalMinutes: '巡检间隔分钟',
         intervalHint: '在 start/生产调度模式下生效；保存后会重排下一次巡检。',
+        testBeforeRun: '生成报告前测试渠道',
+        testBeforeRunHint: '开启后每次巡检报告生成前先测试所有非保护渠道，并把最新结果写入渠道记忆。',
       },
       storage: {
         title: '存储保留',
@@ -335,6 +338,19 @@ const dictionaries = {
         editReportPrompt: '编辑报告提示词',
         editAssistantPrompt: '编辑 AI 助手提示词',
         coreSafetyHint: '核心安全规则由后端固定：不泄露密钥、删除只生成草案、只输出 JSON、不能声称已执行。',
+      },
+      keywordSnippets: {
+        title: '关键词提示片段',
+        hint: '用户消息命中关键词后，会把对应片段注入 AI 助手上下文；适合固定 URL、模型、分组、优先级和权重等模板。',
+        add: '添加片段',
+        remove: '删除片段',
+        empty: '暂无关键词提示片段',
+        name: '名称',
+        namePlaceholder: '例如：小米渠道',
+        keywords: '关键词',
+        keywordsPlaceholder: '例如：小米, Mimo, 小米渠道',
+        content: '注入提示词',
+        contentPlaceholder: '例如：创建小米渠道时，base_url 使用 https://token-plan-cn.xiaomimimo.com，type=1，group=default，priority=30，weight=1，models 使用 mimo-v2.5-pro,mimo-v2.5,mimo-v2-omni。',
       },
       context: {
         title: '上下文数据源',
@@ -511,6 +527,7 @@ const dictionaries = {
       historySources: {
         manual: 'Manual',
         scheduled: 'Scheduled',
+        report: 'Report',
         action: 'Action',
       },
       empty: 'No data',
@@ -650,6 +667,8 @@ const dictionaries = {
         scheduleTitle: 'Report schedule',
         intervalMinutes: 'Inspection interval minutes',
         intervalHint: 'Applies in start/production scheduler mode; saving reschedules the next run.',
+        testBeforeRun: 'Test channels before reports',
+        testBeforeRunHint: 'When enabled, each report run first tests all unprotected channels and writes the latest results into channel memory.',
       },
       storage: {
         title: 'Storage',
@@ -716,6 +735,19 @@ const dictionaries = {
         editReportPrompt: 'Edit report prompt',
         editAssistantPrompt: 'Edit AI assistant prompt',
         coreSafetyHint: 'Core safety rules are fixed on the backend: do not leak secrets, deletion is draft-only, output JSON only, and never claim execution.',
+      },
+      keywordSnippets: {
+        title: 'Keyword prompt snippets',
+        hint: 'When a user message matches a keyword, the matching snippet is injected into the AI assistant context; useful for fixed URLs, models, groups, priorities, and weights.',
+        add: 'Add snippet',
+        remove: 'Remove snippet',
+        empty: 'No keyword prompt snippets yet',
+        name: 'Name',
+        namePlaceholder: 'Example: Xiaomi channel',
+        keywords: 'Keywords',
+        keywordsPlaceholder: 'Example: xiaomi, Mimo, Xiaomi channel',
+        content: 'Injected prompt',
+        contentPlaceholder: 'Example: When creating a Xiaomi channel, use base_url https://token-plan-cn.xiaomimimo.com, type=1, group=default, priority=30, weight=1, and models mimo-v2.5-pro,mimo-v2.5,mimo-v2-omni.',
       },
       context: {
         title: 'Context Sources',

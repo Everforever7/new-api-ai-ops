@@ -633,6 +633,17 @@ th { font-weight: 600; color: var(--text-muted); font-size: 13px; }
   line-height: 1.5;
 }
 
+.settings-empty-row {
+  min-height: 58px;
+  display: grid;
+  place-items: center;
+  border: 1px dashed var(--border);
+  border-radius: 14px;
+  color: var(--text-muted);
+  font-size: 13px;
+  font-weight: 700;
+}
+
 .setting-switch {
   min-width: 72px;
   min-height: 38px;
@@ -732,6 +743,31 @@ th { font-weight: 600; color: var(--text-muted); font-size: 13px; }
 
 .settings-table td {
   vertical-align: middle;
+}
+
+.keyword-snippet-list {
+  display: grid;
+  gap: 12px;
+}
+
+.keyword-snippet-row {
+  display: grid;
+  gap: 12px;
+  padding: 14px;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: var(--surface-hover);
+}
+
+.keyword-snippet-head {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) 44px;
+  align-items: end;
+  gap: 12px;
+}
+
+.keyword-snippet-head .setting-switch {
+  margin-bottom: 3px;
 }
 
 .permission-name {
@@ -1949,6 +1985,9 @@ th { font-weight: 600; color: var(--text-muted); font-size: 13px; }
   .settings-model-row { grid-template-columns: 1fr; }
   .settings-model-row .icon-btn { width: 100%; }
   .settings-clear-key { width: 100%; margin-bottom: 0; }
+  .keyword-snippet-head { grid-template-columns: 1fr; align-items: stretch; }
+  .keyword-snippet-head .icon-btn { width: 100%; }
+  .keyword-snippet-head .setting-switch { margin-bottom: 0; }
   .prompt-editor-launches { display: grid; }
   .prompt-editor-button { justify-content: center; }
   .prompt-editor-overlay { padding: 14px; }

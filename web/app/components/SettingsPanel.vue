@@ -147,6 +147,12 @@ const llmModelOptions = computed(() => {
   ].filter(Boolean)
 })
 
+const keywordSnippets = computed(() =>
+  Array.isArray(props.settings?.prompt?.keywordSnippets)
+    ? props.settings.prompt.keywordSnippets
+    : []
+)
+
 const settingsTabs = computed(() => [
   {
     id: 'execution',
@@ -208,6 +214,49 @@ function settingValue(path) {
 
 function update(path, value) {
   emit('updateSetting', path, value)
+}
+
+function parseKeywordInput(value) {
+  return [
+    ...new Set(
+      String(value || '')
+        .split(/[\n,，;；]/g)
+        .map((item) => item.trim())
+        .filter(Boolean)
+    ),
+  ]
+}
+
+function keywordText(snippet) {
+  return Array.isArray(snippet?.keywords) ? snippet.keywords.join(', ') : ''
+}
+
+function updateKeywordSnippets(snippets) {
+  update('prompt.keywordSnippets', snippets)
+}
+
+function updateKeywordSnippet(index, patch) {
+  const snippets = keywordSnippets.value.map((snippet, itemIndex) =>
+    itemIndex === index ? { ...snippet, ...patch } : snippet
+  )
+  updateKeywordSnippets(snippets)
+}
+
+function addKeywordSnippet() {
+  updateKeywordSnippets([
+    ...keywordSnippets.value,
+    {
+      id: `snippet-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+      enabled: true,
+      name: '',
+      keywords: [],
+      content: '',
+    },
+  ])
+}
+
+function removeKeywordSnippet(index) {
+  updateKeywordSnippets(keywordSnippets.value.filter((_, itemIndex) => itemIndex !== index))
 }
 
 function selectSettingsTab(tabId) {
@@ -545,6 +594,91 @@ function logout() {
             <div class="settings-section">
               <div class="settings-section-title">
                 <ListChecks :size="18" />
+                <span>{{ t('settings.keywordSnippets.title') }}</span>
+                <button
+                  class="bento-btn compact"
+                  type="button"
+                  @click="addKeywordSnippet"
+                >
+                  <PlusCircle :size="16" />
+                  <span>{{ t('settings.keywordSnippets.add') }}</span>
+                </button>
+              </div>
+
+              <p class="settings-help-text">
+                {{ t('settings.keywordSnippets.hint') }}
+              </p>
+
+              <div
+                v-if="!keywordSnippets.length"
+                class="settings-empty-row"
+              >
+                {{ t('settings.keywordSnippets.empty') }}
+              </div>
+
+              <div v-else class="keyword-snippet-list">
+                <section
+                  v-for="(snippet, index) in keywordSnippets"
+                  :key="snippet.id || index"
+                  class="keyword-snippet-row"
+                >
+                  <div class="keyword-snippet-head">
+                    <button
+                      class="setting-switch small"
+                      :class="{ active: snippet.enabled !== false }"
+                      type="button"
+                      :aria-pressed="snippet.enabled !== false"
+                      @click="updateKeywordSnippet(index, { enabled: snippet.enabled === false })"
+                    >
+                      {{ snippet.enabled !== false ? t('settings.on') : t('settings.off') }}
+                    </button>
+
+                    <label class="settings-field">
+                      <span>{{ t('settings.keywordSnippets.name') }}</span>
+                      <input
+                        type="text"
+                        :placeholder="t('settings.keywordSnippets.namePlaceholder')"
+                        :value="snippet.name"
+                        @input="updateKeywordSnippet(index, { name: $event.target.value })"
+                      />
+                    </label>
+
+                    <button
+                      class="bento-btn icon-btn"
+                      type="button"
+                      :aria-label="t('settings.keywordSnippets.remove')"
+                      :title="t('settings.keywordSnippets.remove')"
+                      @click="removeKeywordSnippet(index)"
+                    >
+                      <Trash2 :size="18" />
+                    </button>
+                  </div>
+
+                  <label class="settings-field">
+                    <span>{{ t('settings.keywordSnippets.keywords') }}</span>
+                    <input
+                      type="text"
+                      :placeholder="t('settings.keywordSnippets.keywordsPlaceholder')"
+                      :value="keywordText(snippet)"
+                      @input="updateKeywordSnippet(index, { keywords: parseKeywordInput($event.target.value) })"
+                    />
+                  </label>
+
+                  <label class="settings-field">
+                    <span>{{ t('settings.keywordSnippets.content') }}</span>
+                    <textarea
+                      :placeholder="t('settings.keywordSnippets.contentPlaceholder')"
+                      :value="snippet.content"
+                      @input="updateKeywordSnippet(index, { content: $event.target.value })"
+                    ></textarea>
+                  </label>
+                </section>
+              </div>
+            </div>
+
+            <div class="settings-section">
+              <div class="settings-section-title">
+                <ListChecks :size="18" />
                 <span>{{ t('settings.context.title') }}</span>
               </div>
 
@@ -668,6 +802,26 @@ function logout() {
                   />
                   <small>{{ t('settings.report.intervalHint') }}</small>
                 </label>
+              </div>
+
+              <div class="settings-control-row">
+                <div class="settings-inline-main">
+                  <div class="bento-label">{{ t('settings.report.testBeforeRun') }}</div>
+                  <div class="bento-sub">{{ t('settings.report.testBeforeRunHint') }}</div>
+                </div>
+                <button
+                  class="setting-switch"
+                  :class="{ active: settingValue('report.testBeforeRun') }"
+                  type="button"
+                  :aria-pressed="settingValue('report.testBeforeRun')"
+                  @click="update('report.testBeforeRun', !settingValue('report.testBeforeRun'))"
+                >
+                  {{
+                    settingValue('report.testBeforeRun')
+                      ? t('settings.on')
+                      : t('settings.off')
+                  }}
+                </button>
               </div>
             </div>
 

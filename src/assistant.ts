@@ -1,6 +1,11 @@
 import type { AppConfig } from './config'
 import type { RawAction } from './actions'
-import { loadEffectiveLlmConfig, loadOpsSettings, type OpsSettings } from './settings'
+import {
+  loadEffectiveLlmConfig,
+  loadOpsSettings,
+  type OpsSettings,
+  type PromptKeywordSnippet,
+} from './settings'
 import { getChannelMemoryPromptSummary } from './testing'
 import { NewApiClient } from './newapi/client'
 import { logger } from './logger'
@@ -233,6 +238,7 @@ export async function planAssistantResponse(
         history,
         prepared.redactedInput,
         settings.prompt.assistantInstructions,
+        settings.prompt.keywordSnippets,
         memorySummary,
         runtimeContext,
         options
@@ -266,14 +272,20 @@ async function planWithLlm(
   history: AssistantMessage[],
   sanitizedInput: string,
   assistantInstructions: string,
+  keywordSnippets: PromptKeywordSnippet[],
   memorySummary: ChannelMemoryPromptItem[],
   runtimeContext: Record<string, unknown> | undefined,
   options: AssistantResponseOptions = {}
 ): Promise<AssistantPlan | undefined> {
+  const matchedKeywordSnippets = matchKeywordSnippets(
+    sanitizedInput,
+    keywordSnippets
+  )
   const messages = buildChatMessages(
     history,
     sanitizedInput,
     assistantInstructions,
+    matchedKeywordSnippets,
     memorySummary,
     runtimeContext
   )
@@ -306,9 +318,18 @@ function buildChatMessages(
   history: AssistantMessage[],
   sanitizedInput: string,
   assistantInstructions: string,
+  matchedKeywordSnippets: PromptKeywordSnippet[],
   memorySummary: ChannelMemoryPromptItem[],
   runtimeContext: Record<string, unknown> | undefined
 ): ChatMessage[] {
+  const keywordMessages: ChatMessage[] = matchedKeywordSnippets.length
+    ? [
+        {
+          role: 'system',
+          content: `命中的关键词提示片段（来自设置页；当用户请求缺少固定字段时，优先使用这些片段补全，但不要覆盖用户显式提供的新值）：\n${JSON.stringify(matchedKeywordSnippets.map(snippetForPrompt), null, 2)}`,
+        },
+      ]
+    : []
   const memoryMessages: ChatMessage[] = memorySummary.length
     ? [
         {
@@ -331,6 +352,7 @@ function buildChatMessages(
       role: 'system',
       content: buildAssistantSystemPrompt(assistantInstructions),
     },
+    ...keywordMessages,
     ...memoryMessages,
     ...runtimeMessages,
     ...history.slice(-MAX_HISTORY_MESSAGES).map((item) => ({
@@ -339,6 +361,30 @@ function buildChatMessages(
     })),
     { role: 'user', content: sanitizedInput },
   ]
+}
+
+function matchKeywordSnippets(
+  input: string,
+  snippets: PromptKeywordSnippet[] = []
+) {
+  const text = input.toLowerCase()
+  return snippets
+    .filter((snippet) => {
+      if (!snippet.enabled || !snippet.content.trim()) return false
+      return snippet.keywords.some((keyword) => {
+        const normalized = keyword.trim().toLowerCase()
+        return normalized && text.includes(normalized)
+      })
+    })
+    .slice(0, 10)
+}
+
+function snippetForPrompt(snippet: PromptKeywordSnippet) {
+  return {
+    name: snippet.name,
+    keywords: snippet.keywords,
+    content: snippet.content,
+  }
 }
 
 async function collectAssistantRuntimeContext(

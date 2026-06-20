@@ -89,7 +89,7 @@ export type ChannelTestRun = {
   latencyMs?: number
   error?: string
   responseSummary?: string
-  triggeredBy: 'manual' | 'scheduled' | 'action'
+  triggeredBy: 'manual' | 'scheduled' | 'action' | 'report'
   startedAt: string
   endedAt: string
 }

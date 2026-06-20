@@ -237,6 +237,19 @@ export class OpsRuntime {
     }
   }
 
+  private async runChannelTestsBeforeReport() {
+    const settings = await loadOpsSettings()
+    if (!settings.report.testBeforeRun) return
+
+    if (this.activeTestingRunning) {
+      logger.warn('skipping pre-report channel tests; channel tests are already running')
+      return
+    }
+
+    logger.info('running channel tests before report')
+    await this.runChannelTests({ triggeredBy: 'report' })
+  }
+
   async runChannelTests(options: RunChannelTestsOptions = {}) {
     if (this.activeTestingRunning) {
       throw new Error('channel tests are already running')
@@ -447,6 +460,8 @@ export class OpsRuntime {
     this.running = true
     this.lastError = undefined
     try {
+      await this.runChannelTestsBeforeReport()
+
       logger.info('collecting new-api health snapshot')
       const snapshot = await collectHealthSnapshot(this.config)
 
