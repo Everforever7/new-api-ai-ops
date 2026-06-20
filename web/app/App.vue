@@ -8,6 +8,7 @@ import {
   Radio,
   Settings2,
   Bot,
+  Clock,
 } from 'lucide-vue-next'
 import {
   clearStoredAuth,
@@ -133,6 +134,34 @@ const channelMemoryById = computed(() => {
   return Object.fromEntries(
     channelMemories.value.map((memory) => [String(memory.channelId), memory])
   )
+})
+
+const timeUntilNextRunMs = ref(0)
+let countdownTimer = null
+
+function updateCountdown() {
+  if (!status.value?.lastRunAt || !status.value?.config?.reportIntervalMinutes) {
+    timeUntilNextRunMs.value = 0
+    return
+  }
+  const lastRun = new Date(status.value.lastRunAt).getTime()
+  const interval = status.value.config.reportIntervalMinutes * 60 * 1000
+  const nextRun = lastRun + interval
+  const now = Date.now()
+  timeUntilNextRunMs.value = Math.max(0, nextRun - now)
+}
+
+const timeUntilNextRunText = computed(() => {
+  if (runningCheck.value || status.value?.running) return t('status.checking')
+  if (!status.value?.lastRunAt) return ''
+  if (timeUntilNextRunMs.value <= 0) return '即将巡检'
+  
+  const totalSeconds = Math.floor(timeUntilNextRunMs.value / 1000)
+  const minutes = Math.floor(totalSeconds / 60)
+  const seconds = totalSeconds % 60
+  
+  const s = seconds < 10 ? `0${seconds}` : seconds
+  return `${minutes}:${s} 后巡检`
 })
 
 watch(
@@ -820,10 +849,12 @@ function onLoginSuccess(authenticatedStatus) {
 onMounted(() => {
   window.addEventListener('auth:unauthorized', handleUnauthorized)
   checkAuth()
+  countdownTimer = setInterval(updateCountdown, 1000)
 })
 
 onBeforeUnmount(() => {
   window.removeEventListener('auth:unauthorized', handleUnauthorized)
+  if (countdownTimer) clearInterval(countdownTimer)
 })
 </script>
 
@@ -835,6 +866,10 @@ onBeforeUnmount(() => {
     <header class="floating-brand">
       <div class="brand-mark"><Layers3 :size="24" /></div>
       <h1>{{ t('app.title') }}</h1>
+      <div class="countdown-bubble" v-if="timeUntilNextRunText">
+        <Clock :size="14" />
+        <span>{{ timeUntilNextRunText }}</span>
+      </div>
     </header>
 
     <main class="bento-container">

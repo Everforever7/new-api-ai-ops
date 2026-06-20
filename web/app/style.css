@@ -99,6 +99,24 @@ button { font: inherit; }
 .floating-brand h1 {
   font-size: 18px; font-weight: 700; letter-spacing: -0.5px;
 }
+.countdown-bubble {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: var(--surface-hover);
+  border: 1px solid var(--border);
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: 13px;
+  font-weight: 650;
+  color: var(--text-muted);
+  margin-left: 8px;
+  transition: all 0.2s ease;
+}
+.countdown-bubble:hover {
+  background: var(--border);
+  color: var(--text);
+}
 
 /* Bento Container */
 .bento-container {
