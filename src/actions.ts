@@ -1,11 +1,15 @@
-import { appendFile, mkdir, readFile, writeFile } from 'node:fs/promises'
-import { dirname } from 'node:path'
 import type { AppConfig } from './config'
 import type { Channel, ChannelMemory, HealthSnapshot } from './types/domain'
 import { NewApiClient } from './newapi/client'
 import { loadOpsSettings, type OpsSettings } from './settings'
 import { logger } from './logger'
 import { saveChannelMemory } from './testing'
+import {
+  appendActionAuditRecord,
+  hasRecentExecutedAction,
+  listActionAuditRecords,
+  pruneActionAuditRecords,
+} from './storage/db'
 
 export type ActionStatus =
   | 'queued'
@@ -63,7 +67,6 @@ export type RawAction = {
   model?: unknown
 }
 
-const AUDIT_PATH = process.env.AI_OPS_ACTION_AUDIT_PATH?.trim() || 'data/action-audit.jsonl'
 const CHANNEL_STATUS_ENABLED = 1
 const CHANNEL_STATUS_AUTO_DISABLED = 3
 const REDACTED_VALUE = '[REDACTED]'
@@ -499,8 +502,7 @@ function payloadRequirementReason(action: OpsAction) {
 }
 
 async function appendAudit(action: OpsAction) {
-  await mkdir(dirname(AUDIT_PATH), { recursive: true })
-  await appendFile(AUDIT_PATH, `${JSON.stringify(sanitizeActionForClient(action))}\n`)
+  appendActionAuditRecord(sanitizeActionForClient(action) as Record<string, unknown>)
 
   try {
     const settings = await loadOpsSettings()
@@ -511,18 +513,7 @@ async function appendAudit(action: OpsAction) {
 }
 
 export async function pruneActionAudit(maxEntries: number) {
-  const limit = Math.max(1, Math.floor(maxEntries))
-
-  try {
-    const raw = await readFile(AUDIT_PATH, 'utf8')
-    const lines = raw.trim().split('\n').filter(Boolean)
-    if (lines.length <= limit) return
-
-    await mkdir(dirname(AUDIT_PATH), { recursive: true })
-    await writeFile(AUDIT_PATH, `${lines.slice(-limit).join('\n')}\n`)
-  } catch (error) {
-    if ((error as { code?: string }).code !== 'ENOENT') throw error
-  }
+  pruneActionAuditRecords(maxEntries)
 }
 
 function parseAuditLine(line: string) {
@@ -549,21 +540,11 @@ function actionAuditTime(action: OpsAction) {
 
 export async function listActionAudit(options: { limit?: number } = {}) {
   const limit = Math.min(Math.max(Number(options.limit || 100), 1), 1000)
-  try {
-    const raw = await readFile(AUDIT_PATH, 'utf8')
-    return raw
-      .trim()
-      .split('\n')
-      .filter(Boolean)
-      .slice(-limit)
-      .map(parseAuditLine)
-      .filter((item): item is OpsAction => Boolean(item))
-      .sort((a, b) => actionAuditTime(b) - actionAuditTime(a))
-      .map(sanitizeActionForClient)
-  } catch (error) {
-    if ((error as { code?: string }).code === 'ENOENT') return []
-    throw error
-  }
+  return listActionAuditRecords(limit)
+    .map((item) => parseAuditLine(JSON.stringify(item)))
+    .filter((item): item is OpsAction => Boolean(item))
+    .sort((a, b) => actionAuditTime(b) - actionAuditTime(a))
+    .map(sanitizeActionForClient)
 }
 
 async function coolingDown(action: OpsAction, settings: OpsSettings) {
@@ -571,31 +552,9 @@ async function coolingDown(action: OpsAction, settings: OpsSettings) {
     return false
   }
 
-  try {
-    const raw = await readFile(AUDIT_PATH, 'utf8')
-    const cutoff =
-      Date.now() - settings.aiExecution.safety.channelCooldownMinutes * 60_000
-    return raw
-      .trim()
-      .split('\n')
-      .slice(-500)
-      .some((line) => {
-        try {
-          const item = JSON.parse(line) as OpsAction
-          return (
-            item.channelId === action.channelId &&
-            item.action === action.action &&
-            item.status === 'executed' &&
-            item.executedAt !== undefined &&
-            new Date(item.executedAt).getTime() >= cutoff
-          )
-        } catch {
-          return false
-        }
-      })
-  } catch {
-    return false
-  }
+  const cutoff =
+    Date.now() - settings.aiExecution.safety.channelCooldownMinutes * 60_000
+  return hasRecentExecutedAction(action.channelId, action.action, cutoff)
 }
 
 function updateAction(

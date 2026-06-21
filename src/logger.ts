@@ -1,5 +1,9 @@
-import { appendFile, mkdir, readFile, writeFile } from 'node:fs/promises'
-import { dirname } from 'node:path'
+import {
+  appendAppLogRecord,
+  listAppLogRecords,
+  pruneAppLogRecords,
+} from './storage/db'
+import { DEFAULT_OPS_SETTINGS } from './defaults'
 
 type LogLevel = 'info' | 'warn' | 'error'
 
@@ -11,13 +15,10 @@ export type AppLogEntry = {
   meta?: unknown
 }
 
-const APP_LOG_PATH =
-  process.env.AI_OPS_APP_LOG_PATH?.trim() || 'data/app-log.jsonl'
-const DEFAULT_MAX_APP_LOG_ENTRIES = 5000
 const PRUNE_INTERVAL_WRITES = 100
 const REDACTED_VALUE = '[REDACTED]'
 
-let maxAppLogEntries = DEFAULT_MAX_APP_LOG_ENTRIES
+let maxAppLogEntries = DEFAULT_OPS_SETTINGS.storage.maxAppLogEntries
 let writesSincePrune = 0
 let pruning = false
 
@@ -91,48 +92,16 @@ export function configureAppLogger(options: { maxEntries?: number } = {}) {
 }
 
 export async function pruneAppLogs(maxEntries = maxAppLogEntries) {
-  const limit = normalizeLimit(maxEntries)
-
-  try {
-    const raw = await readFile(APP_LOG_PATH, 'utf8')
-    const lines = raw.trim().split('\n').filter(Boolean)
-    if (lines.length <= limit) return
-
-    await mkdir(dirname(APP_LOG_PATH), { recursive: true })
-    await writeFile(APP_LOG_PATH, `${lines.slice(-limit).join('\n')}\n`)
-  } catch (error) {
-    if ((error as { code?: string }).code !== 'ENOENT') throw error
-  }
+  pruneAppLogRecords(normalizeLimit(maxEntries))
 }
 
 export async function listAppLogs(options: { limit?: number } = {}) {
   const limit = Math.min(1000, Math.max(1, Math.floor(options.limit || 200)))
-
-  try {
-    const raw = await readFile(APP_LOG_PATH, 'utf8')
-    return raw
-      .trim()
-      .split('\n')
-      .filter(Boolean)
-      .slice(-limit)
-      .map((line) => {
-        try {
-          return JSON.parse(line) as AppLogEntry
-        } catch {
-          return undefined
-        }
-      })
-      .filter((entry): entry is AppLogEntry => Boolean(entry))
-      .reverse()
-  } catch (error) {
-    if ((error as { code?: string }).code === 'ENOENT') return []
-    throw error
-  }
+  return listAppLogRecords(limit) as AppLogEntry[]
 }
 
 async function appendAppLog(entry: AppLogEntry) {
-  await mkdir(dirname(APP_LOG_PATH), { recursive: true })
-  await appendFile(APP_LOG_PATH, `${JSON.stringify(entry)}\n`)
+  appendAppLogRecord(entry)
 
   writesSincePrune += 1
   if (writesSincePrune < PRUNE_INTERVAL_WRITES || pruning) return

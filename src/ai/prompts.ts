@@ -1,5 +1,5 @@
 import type { ChannelMemoryPromptItem, HealthSnapshot } from '../types/domain'
-import { DEFAULT_REPORT_INSTRUCTIONS } from '../promptDefaults'
+import { DEFAULT_REPORT_INSTRUCTIONS } from '../defaults'
 import { buildActionProtocolPrompt } from '../actionProtocolPrompt'
 
 type PromptOptions = {

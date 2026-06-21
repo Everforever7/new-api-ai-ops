@@ -1,7 +1,6 @@
-import { mkdir, readFile, writeFile } from 'node:fs/promises'
-import { dirname } from 'node:path'
 import type { AppConfig } from './config'
-import { DEFAULT_REPORT_INSTRUCTIONS } from './promptDefaults'
+import { DEFAULT_OPS_SETTINGS } from './defaults'
+import { loadJsonValue, saveJsonValue } from './storage/db'
 
 export type ConfirmationStrategy = 'auto' | 'confirm' | 'never'
 
@@ -99,89 +98,10 @@ export type PublicOpsSettings = Omit<OpsSettings, 'llm'> & {
   }
 }
 
-const SETTINGS_PATH = process.env.AI_OPS_SETTINGS_PATH?.trim() || 'data/settings.json'
-
-const DEFAULT_SETTINGS: OpsSettings = {
-  version: 1,
-  llm: {
-    baseUrl: '',
-    model: '',
-    temperature: 0.2,
-  },
-  context: {
-    enabled: true,
-    includeChannelSummary: true,
-    includeChannelDetails: true,
-    includeRecentLogs: true,
-    includeLogStats: true,
-    includeModels: true,
-    includeLatency: true,
-    includeBalance: false,
-    includeChannelMemory: true,
-    maxChannels: 80,
-    maxLogs: 50,
-  },
-  prompt: {
-    reportInstructions: DEFAULT_REPORT_INSTRUCTIONS,
-    assistantInstructions: [
-      '如果用户请求创建渠道但缺少 base_url、key、models 等必要信息，只追问缺失字段，不要编造。',
-      '模型名没有固定前缀，mimo-v2.5-pro、mimo-v2.5、provider/model、custom-001 都可能是合法模型。用户在“模型/支持模型/models”附近给出的逗号、顿号、空格分隔值都应视作模型列表。',
-      '如果用户分多轮补充信息，你可以结合最近对话上下文生成完整动作；例如上一轮已有 [API_KEY_1] 和 base_url，本轮只补模型时，可以使用 [API_KEY_1]。',
-      '回复中要提醒用户到动作队列查看后端策略给出的最终状态。',
-    ].join('\n'),
-    keywordSnippets: [],
-  },
-  report: {
-    intervalMinutes: 15,
-    testBeforeRun: true,
-  },
-  aiExecution: {
-    enabled: true,
-    permissions: {
-      testChannel: true,
-      createChannel: true,
-      updateChannel: true,
-      disableChannel: true,
-      deleteChannel: true,
-    },
-    confirmation: {
-      testChannel: 'auto',
-      createChannel: 'confirm',
-      updateChannel: 'auto',
-      disableChannel: 'auto',
-      deleteChannel: 'confirm',
-    },
-    safety: {
-      minRequestsForActions: 20,
-      maxActionsPerRun: 3,
-      channelCooldownMinutes: 60,
-    },
-    protectedChannels: {
-      ids: [],
-      groups: [],
-      tags: [],
-      nameIncludes: [],
-      modelIncludes: [],
-      types: [],
-    },
-  },
-  activeTesting: {
-    enabled: false,
-    intervalMinutes: 30,
-    concurrency: 2,
-    failureThreshold: 3,
-    recoveryThreshold: 1,
-    historyLimit: 3,
-  },
-  storage: {
-    maxReports: 500,
-    maxActionAuditEntries: 5000,
-    maxAppLogEntries: 5000,
-  },
-}
+const SETTINGS_KEY = 'settings'
 
 function cloneDefaultSettings() {
-  return JSON.parse(JSON.stringify(DEFAULT_SETTINGS)) as OpsSettings
+  return JSON.parse(JSON.stringify(DEFAULT_OPS_SETTINGS)) as OpsSettings
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -659,15 +579,7 @@ export function publicOpsSettings(
 }
 
 export async function loadOpsSettings() {
-  try {
-    const raw = await readFile(SETTINGS_PATH, 'utf8')
-    return normalizeOpsSettings(JSON.parse(raw))
-  } catch (error) {
-    if ((error as { code?: string }).code === 'ENOENT') {
-      return cloneDefaultSettings()
-    }
-    throw error
-  }
+  return normalizeOpsSettings(loadJsonValue(SETTINGS_KEY) || cloneDefaultSettings())
 }
 
 export async function loadPublicOpsSettings(config: AppConfig) {
@@ -681,8 +593,7 @@ export async function loadEffectiveLlmConfig(config: AppConfig) {
 export async function saveOpsSettings(input: unknown) {
   const previous = await loadOpsSettings()
   const settings = normalizeOpsSettings(input, previous)
-  await mkdir(dirname(SETTINGS_PATH), { recursive: true })
-  await writeFile(SETTINGS_PATH, `${JSON.stringify(settings, null, 2)}\n`)
+  saveJsonValue(SETTINGS_KEY, settings)
   return settings
 }
 

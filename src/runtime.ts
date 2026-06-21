@@ -1,6 +1,4 @@
-import { mkdirSync, readFileSync } from 'node:fs'
-import { writeFile } from 'node:fs/promises'
-import { basename, dirname } from 'node:path'
+import { basename } from 'node:path'
 import type { AppConfig } from './config'
 import type { Channel, HealthSnapshot } from './types/domain'
 import { generateOpsReport } from './ai/llm'
@@ -34,9 +32,9 @@ import {
   runChannelTests as runChannelTestsNow,
   type RunChannelTestsOptions,
 } from './testing'
+import { loadJsonValue, saveJsonValue } from './storage/db'
 
-const ACTION_QUEUE_PATH =
-  process.env.AI_OPS_ACTION_QUEUE_PATH?.trim() || 'data/action-queue.json'
+const ACTION_QUEUE_KEY = 'action_queue'
 const MAX_PERSISTED_ACTIONS = 300
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -92,20 +90,13 @@ export type RunReportResult = {
 }
 
 function loadPersistedActions() {
-  try {
-    const raw = readFileSync(ACTION_QUEUE_PATH, 'utf8')
-    const parsed = JSON.parse(raw) as unknown
-    return Array.isArray(parsed)
-      ? parsed
-          .filter(isActionLike)
-          .filter(isOpenAction)
-          .slice(0, MAX_PERSISTED_ACTIONS)
-      : []
-  } catch (error) {
-    if ((error as { code?: string }).code === 'ENOENT') return []
-    logger.warn('failed to load persisted action queue', error)
-    return []
-  }
+  const parsed = loadJsonValue(ACTION_QUEUE_KEY)
+  return Array.isArray(parsed)
+    ? parsed
+        .filter(isActionLike)
+        .filter(isOpenAction)
+        .slice(0, MAX_PERSISTED_ACTIONS)
+    : []
 }
 
 function isActionLike(value: unknown): value is OpsAction {
@@ -140,13 +131,9 @@ export class OpsRuntime {
   constructor(private readonly config: AppConfig) {}
 
   private async persistActions() {
-    mkdirSync(dirname(ACTION_QUEUE_PATH), { recursive: true })
     const openActions = this.actions.filter(isOpenAction)
     this.actions = openActions
-    await writeFile(
-      ACTION_QUEUE_PATH,
-      `${JSON.stringify(openActions.slice(0, MAX_PERSISTED_ACTIONS), null, 2)}\n`
-    )
+    saveJsonValue(ACTION_QUEUE_KEY, openActions.slice(0, MAX_PERSISTED_ACTIONS))
   }
 
   getState() {

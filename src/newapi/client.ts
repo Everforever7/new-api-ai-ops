@@ -1,5 +1,3 @@
-import { mkdir, readFile, rm, writeFile } from 'node:fs/promises'
-import { dirname } from 'node:path'
 import type { AppConfig } from '../config'
 import type {
   ApiEnvelope,
@@ -7,6 +5,11 @@ import type {
   LogListData,
   LogStats,
 } from '../types/domain'
+import {
+  deleteNewApiSession,
+  loadNewApiSession,
+  saveNewApiSession,
+} from '../storage/db'
 
 type RequestOptions = {
   method?: string
@@ -26,8 +29,6 @@ type SharedSession = {
   updatedAt: string
 }
 
-const SESSION_PATH =
-  process.env.AI_OPS_NEWAPI_SESSION_PATH?.trim() || 'data/newapi-session.json'
 const sharedSessions = new Map<string, SharedSession>()
 const sharedLoginPromises = new Map<string, Promise<void>>()
 
@@ -69,37 +70,20 @@ async function loadSharedSession(key: string) {
   const cached = sharedSessions.get(key)
   if (cached) return cached
 
-  try {
-    const raw = await readFile(SESSION_PATH, 'utf8')
-    const session = readSessionRecord(JSON.parse(raw))
-    if (!session || session.key !== key) return undefined
-    sharedSessions.set(key, session)
-    return session
-  } catch (error) {
-    if ((error as { code?: string }).code === 'ENOENT') return undefined
-    return undefined
-  }
+  const session = readSessionRecord(loadNewApiSession(key))
+  if (!session || session.key !== key) return undefined
+  sharedSessions.set(key, session)
+  return session
 }
 
 async function saveSharedSession(session: SharedSession) {
   sharedSessions.set(session.key, session)
-  await mkdir(dirname(SESSION_PATH), { recursive: true })
-  await writeFile(SESSION_PATH, `${JSON.stringify(session, null, 2)}\n`)
+  saveNewApiSession(session.key, session)
 }
 
 async function clearSharedSession(key: string) {
   sharedSessions.delete(key)
-  try {
-    const raw = await readFile(SESSION_PATH, 'utf8')
-    const session = readSessionRecord(JSON.parse(raw))
-    if (session?.key === key) {
-      await rm(SESSION_PATH, { force: true })
-    }
-  } catch (error) {
-    if ((error as { code?: string }).code !== 'ENOENT') {
-      return
-    }
-  }
+  deleteNewApiSession(key)
 }
 
 export class NewApiClient {

@@ -1,8 +1,13 @@
-import { appendFile, mkdir, readFile, writeFile } from 'node:fs/promises'
-import { dirname } from 'node:path'
 import type { AppConfig } from './config'
 import { NewApiClient } from './newapi/client'
 import { loadOpsSettings, type OpsSettings } from './settings'
+import {
+  appendChannelTestRuns,
+  listChannelTestRunRecords,
+  loadChannelMemoryRecords,
+  pruneChannelTestRuns,
+  replaceChannelMemoryRecords,
+} from './storage/db'
 import type {
   Channel,
   ChannelMemory,
@@ -22,10 +27,6 @@ export type RunChannelTestsResult = {
   memorySummary: ChannelMemoryPromptItem[]
 }
 
-const TEST_HISTORY_PATH =
-  process.env.AI_OPS_TEST_HISTORY_PATH?.trim() || 'data/channel-tests.jsonl'
-const CHANNEL_MEMORY_PATH =
-  process.env.AI_OPS_CHANNEL_MEMORY_PATH?.trim() || 'data/channel-memory.json'
 const MAX_SUMMARY_LENGTH = 500
 const MAX_TEXT_LENGTH = 2000
 
@@ -284,32 +285,7 @@ function selectChannels(
 }
 
 async function appendTestRuns(runs: ChannelTestRun[]) {
-  if (!runs.length) return
-  await mkdir(dirname(TEST_HISTORY_PATH), { recursive: true })
-  await appendFile(
-    TEST_HISTORY_PATH,
-    runs.map((run) => JSON.stringify(run)).join('\n') + '\n'
-  )
-}
-
-function parseHistoryLine(line: string) {
-  try {
-    const parsed = JSON.parse(line) as unknown
-    if (!isRecord(parsed)) return undefined
-    if (typeof parsed.channelId !== 'number') return undefined
-    if (parsed.status !== 'success' && parsed.status !== 'failed') return undefined
-    return parsed as ChannelTestRun
-  } catch {
-    return undefined
-  }
-}
-
-function getHistoryTimestamp(run: ChannelTestRun) {
-  const endedAt = Date.parse(run.endedAt)
-  if (Number.isFinite(endedAt)) return endedAt
-  const startedAt = Date.parse(run.startedAt)
-  if (Number.isFinite(startedAt)) return startedAt
-  return 0
+  appendChannelTestRuns(runs as unknown as Array<Record<string, unknown>>)
 }
 
 export async function getChannelTestHistory(options: {
@@ -317,96 +293,34 @@ export async function getChannelTestHistory(options: {
   limit?: number
 } = {}) {
   const limit = Math.min(Math.max(Number(options.limit || 100), 1), 1000)
-  try {
-    const raw = await readFile(TEST_HISTORY_PATH, 'utf8')
-    return raw
-      .trim()
-      .split('\n')
-      .map(parseHistoryLine)
-      .filter((item): item is ChannelTestRun => Boolean(item))
-      .filter((item) =>
-        options.channelId ? item.channelId === options.channelId : true
-      )
-      .sort(
-        (a, b) =>
-          new Date(b.endedAt).getTime() - new Date(a.endedAt).getTime()
-      )
-      .slice(0, limit)
-  } catch (error) {
-    if ((error as { code?: string }).code === 'ENOENT') return []
-    throw error
-  }
+  return (listChannelTestRunRecords({
+    channelId: options.channelId,
+    limit,
+  }) as ChannelTestRun[]).filter((item) =>
+    options.channelId ? item.channelId === options.channelId : true
+  )
 }
 
 async function pruneHistory(
   historyLimit: number,
   validChannelIds?: Set<number>
 ) {
-  const limit = Math.max(1, Math.floor(historyLimit))
-  try {
-    const raw = await readFile(TEST_HISTORY_PATH, 'utf8')
-    const records = raw
-      .trim()
-      .split('\n')
-      .filter(Boolean)
-      .map((line, index) => ({
-        index,
-        line,
-        run: parseHistoryLine(line),
-      }))
-      .filter(
-        (
-          item
-        ): item is { index: number; line: string; run: ChannelTestRun } =>
-          Boolean(item.run)
-      )
-      .filter((item) =>
-        validChannelIds ? validChannelIds.has(item.run.channelId) : true
-      )
-
-    const countsByChannel = new Map<number, number>()
-    const keptIndexes = new Set<number>()
-    for (const record of [...records].sort(
-      (a, b) =>
-        getHistoryTimestamp(b.run) - getHistoryTimestamp(a.run) ||
-        b.index - a.index
-    )) {
-      const count = countsByChannel.get(record.run.channelId) || 0
-      if (count >= limit) continue
-      countsByChannel.set(record.run.channelId, count + 1)
-      keptIndexes.add(record.index)
-    }
-
-    const lines = records
-      .filter((record) => keptIndexes.has(record.index))
-      .sort((a, b) => a.index - b.index)
-      .map((record) => record.line)
-
-    await writeFile(
-      TEST_HISTORY_PATH,
-      lines.length ? `${lines.join('\n')}\n` : ''
-    )
-  } catch (error) {
-    if ((error as { code?: string }).code !== 'ENOENT') {
-      throw error
-    }
-  }
+  pruneChannelTestRuns(historyLimit, validChannelIds)
 }
 
 async function loadMemoryStore() {
-  try {
-    const raw = await readFile(CHANNEL_MEMORY_PATH, 'utf8')
-    const parsed = JSON.parse(raw) as unknown
-    return isRecord(parsed) ? parsed as Record<string, ChannelMemory> : {}
-  } catch (error) {
-    if ((error as { code?: string }).code === 'ENOENT') return {}
-    throw error
-  }
+  return Object.fromEntries(
+    (loadChannelMemoryRecords() as ChannelMemory[]).map((memory) => [
+      String(memory.channelId),
+      memory,
+    ])
+  )
 }
 
 async function saveMemoryStore(store: Record<string, ChannelMemory>) {
-  await mkdir(dirname(CHANNEL_MEMORY_PATH), { recursive: true })
-  await writeFile(CHANNEL_MEMORY_PATH, `${JSON.stringify(store, null, 2)}\n`)
+  replaceChannelMemoryRecords(
+    Object.values(store) as unknown as Array<Record<string, unknown>>
+  )
 }
 
 function emptyTestSummary(): ChannelMemory['testSummary'] {

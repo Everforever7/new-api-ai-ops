@@ -1,3 +1,5 @@
+import { DEFAULT_APP_CONFIG } from './defaults'
+
 export type AppConfig = {
   newApi: {
     baseUrl: string
@@ -80,43 +82,65 @@ function extraHeadersEnv(): Record<string, string> {
 }
 
 export function loadConfig(): AppConfig {
+  const defaults = DEFAULT_APP_CONFIG
   return {
     newApi: {
-      baseUrl: cleanUrl(process.env.NEWAPI_BASE_URL || 'http://localhost:3000'),
+      baseUrl: cleanUrl(process.env.NEWAPI_BASE_URL || defaults.newApi.baseUrl),
       cookie: optional(process.env.NEWAPI_COOKIE),
       username: optional(process.env.NEWAPI_USERNAME),
       password: optional(process.env.NEWAPI_PASSWORD),
       authorization: optional(process.env.NEWAPI_AUTHORIZATION),
       userHeader: optional(process.env.NEWAPI_USER_HEADER),
       extraHeaders: extraHeadersEnv(),
-      timeoutMs: numberEnv('NEWAPI_REQUEST_TIMEOUT_MS', 20_000),
-      channelPageSize: numberEnv('NEWAPI_CHANNEL_PAGE_SIZE', 100),
-      logPageSize: numberEnv('NEWAPI_LOG_PAGE_SIZE', 100),
-      logHours: numberEnv('NEWAPI_LOG_HOURS', 1),
-      balanceWarningUsd: numberEnv('BALANCE_WARNING_USD', 5),
+      timeoutMs: numberEnv(
+        'NEWAPI_REQUEST_TIMEOUT_MS',
+        defaults.newApi.timeoutMs
+      ),
+      channelPageSize: numberEnv(
+        'NEWAPI_CHANNEL_PAGE_SIZE',
+        defaults.newApi.channelPageSize
+      ),
+      logPageSize: numberEnv(
+        'NEWAPI_LOG_PAGE_SIZE',
+        defaults.newApi.logPageSize
+      ),
+      logHours: numberEnv('NEWAPI_LOG_HOURS', defaults.newApi.logHours),
+      balanceWarningUsd: numberEnv(
+        'BALANCE_WARNING_USD',
+        defaults.newApi.balanceWarningUsd
+      ),
     },
     llm: {
-      baseUrl: cleanUrl(process.env.LLM_BASE_URL || 'http://localhost:3000/v1'),
+      baseUrl: cleanUrl(process.env.LLM_BASE_URL || defaults.llm.baseUrl),
       apiKey: optional(process.env.LLM_API_KEY),
-      model: process.env.LLM_MODEL?.trim() || 'gpt-4.1-mini',
-      temperature: numberEnv('LLM_TEMPERATURE', 0.2),
+      model: process.env.LLM_MODEL?.trim() || defaults.llm.model,
+      temperature: numberEnv('LLM_TEMPERATURE', defaults.llm.temperature),
     },
     discord: {
       webhookUrl: optional(process.env.DISCORD_WEBHOOK_URL),
     },
     report: {
-      intervalMinutes: numberEnv('REPORT_INTERVAL_MINUTES', 15),
-      minRequests: numberEnv('REPORT_MIN_REQUESTS', 20),
-      failureRateThreshold: numberEnv('REPORT_FAILURE_RATE_THRESHOLD', 0.3),
-      timezone: process.env.REPORT_TIMEZONE?.trim() || 'Asia/Hong_Kong',
-      saveDir: process.env.REPORT_SAVE_DIR?.trim() || 'reports',
-      includeRawSummary: booleanEnv('REPORT_INCLUDE_RAW_SUMMARY'),
+      intervalMinutes: numberEnv(
+        'REPORT_INTERVAL_MINUTES',
+        defaults.report.intervalMinutes
+      ),
+      minRequests: numberEnv('REPORT_MIN_REQUESTS', defaults.report.minRequests),
+      failureRateThreshold: numberEnv(
+        'REPORT_FAILURE_RATE_THRESHOLD',
+        defaults.report.failureRateThreshold
+      ),
+      timezone: process.env.REPORT_TIMEZONE?.trim() || defaults.report.timezone,
+      saveDir: process.env.REPORT_SAVE_DIR?.trim() || defaults.report.saveDir,
+      includeRawSummary: booleanEnv(
+        'REPORT_INCLUDE_RAW_SUMMARY',
+        defaults.report.includeRawSummary
+      ),
     },
     panel: {
-      enabled: booleanEnv('PANEL_ENABLED', true),
-      host: process.env.PANEL_HOST?.trim() || '0.0.0.0',
-      port: numberEnv('PANEL_PORT', 8787),
-      username: process.env.PANEL_USERNAME?.trim() || 'admin',
+      enabled: booleanEnv('PANEL_ENABLED', defaults.panel.enabled),
+      host: process.env.PANEL_HOST?.trim() || defaults.panel.host,
+      port: numberEnv('PANEL_PORT', defaults.panel.port),
+      username: process.env.PANEL_USERNAME?.trim() || defaults.panel.username,
       password: optional(process.env.PANEL_PASSWORD),
     },
   }
