@@ -18,11 +18,15 @@ export function buildActionProtocolPrompt(supportedActions: string) {
     '9. disable_channel、delete_channel 不需要 payload；delete_channel 必须 requires_confirm=true。',
   ]
 
+  let nextRuleNumber = 10
+  if (actionSet.has('delete_channel')) {
+    lines.push(`${nextRuleNumber++}. 如果渠道明确出现 API Key / 凭证类错误（例如无可用凭证、invalid token、not authorized、API key 无效或过期），且无法给出可执行修复 payload，可以输出 delete_channel 草案交给人工判断；risk 使用 medium 或 high，requires_confirm 必须为 true，reason 必须说明错误证据、连续失败次数或最近测试结果。不要为同一问题输出没有 payload 的 update_channel。`)
+  }
   if (actionSet.has('test_channel')) {
-    lines.push('10. test_channel 可选 payload: {"model":"具体模型名"}。')
+    lines.push(`${nextRuleNumber++}. test_channel 可选 payload: {"model":"具体模型名"}。`)
   }
   if (actionSet.has('notify_low_balance')) {
-    lines.push('10. notify_low_balance 不需要 payload，用于记录低余额通知建议。')
+    lines.push(`${nextRuleNumber++}. notify_low_balance 不需要 payload，用于记录低余额通知建议。`)
   }
 
   return lines.join('\n')

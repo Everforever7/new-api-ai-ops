@@ -124,15 +124,8 @@ const DEFAULT_SETTINGS: OpsSettings = {
   prompt: {
     reportInstructions: DEFAULT_REPORT_INSTRUCTIONS,
     assistantInstructions: [
-      '创建渠道动作格式: {"action":"create_channel","target":"渠道名称","risk":"medium","requires_confirm":true,"reason":"原因","payload":{"mode":"single","channel":{"name":"名称","type":1,"key":"[API_KEY_1]","base_url":"https://...","models":"model-a,model-b","group":"default","priority":0,"weight":0,"remark":"可选备注"}}}',
-      '测试渠道动作格式: {"action":"test_channel","target":"渠道名称","channel_id":12,"channel_name":"渠道名称","risk":"low","requires_confirm":true,"reason":"原因","payload":{"model":"可选模型"}}。',
-      '禁用渠道动作格式: {"action":"disable_channel","target":"渠道名称","channel_id":12,"channel_name":"渠道名称","risk":"medium","requires_confirm":true,"reason":"原因"}。',
-      '开启渠道动作格式: {"action":"update_channel","target":"渠道名称","channel_id":12,"channel_name":"渠道名称","risk":"medium","requires_confirm":true,"reason":"原因","payload":{"status":1}}。只有这种仅包含 status=1 的更新可被后端视为自动维护动作。',
-      '更新备注动作格式: {"action":"update_channel","target":"渠道名称","channel_id":12,"channel_name":"渠道名称","risk":"medium","requires_confirm":true,"reason":"原因","payload":{"remark":"备注内容"}}。',
-      '删除渠道动作格式: {"action":"delete_channel","target":"渠道名称","channel_id":12,"channel_name":"渠道名称","risk":"high","requires_confirm":true,"reason":"原因"}。删除只能生成草案，不能声称自动执行。',
-      '创建渠道必须有 base_url、key、models；如果缺字段，只追问，不要编造，也不要生成 create_channel。',
+      '如果用户请求创建渠道但缺少 base_url、key、models 等必要信息，只追问缺失字段，不要编造。',
       '模型名没有固定前缀，mimo-v2.5-pro、mimo-v2.5、provider/model、custom-001 都可能是合法模型。用户在“模型/支持模型/models”附近给出的逗号、顿号、空格分隔值都应视作模型列表。',
-      '输入里的密钥、Authorization、Cookie 会以 [API_KEY_1] 这类占位符出现；create_channel 的 payload.channel.key 必须使用密钥占位符，例如 [API_KEY_1]。',
       '如果用户分多轮补充信息，你可以结合最近对话上下文生成完整动作；例如上一轮已有 [API_KEY_1] 和 base_url，本轮只补模型时，可以使用 [API_KEY_1]。',
       '回复中要提醒用户到动作队列查看后端策略给出的最终状态。',
     ].join('\n'),

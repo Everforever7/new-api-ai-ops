@@ -167,6 +167,8 @@ async function syncStatusFromServer() {
   const wasRunning = Boolean(previousStatus?.running)
   try {
     const nextStatus = await getStatus()
+    if (!isLoggedIn.value) return
+
     const nextLastRunAt = nextStatus?.lastRunAt || ''
     const nextReportPath = nextStatus?.lastReportPath || ''
     const runAdvanced = Boolean(
@@ -185,6 +187,7 @@ async function syncStatusFromServer() {
     updateCountdown()
 
     if (!nextStatus?.running && (runAdvanced || reportChanged || runCompleted)) {
+      if (!isLoggedIn.value) return
       await refreshAll({ initialStatus: nextStatus })
       await loadActions()
     }
@@ -525,6 +528,7 @@ async function refreshAll(options = {}) {
       getChannels(),
       getChannelMemories(),
     ])
+    if (!isLoggedIn.value) return
 
     if (statusResult.status === 'fulfilled') {
       status.value = statusResult.value
