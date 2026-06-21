@@ -36,7 +36,7 @@ export const DEFAULT_APP_CONFIG = {
   llm: {
     baseUrl: 'http://localhost:3000/v1',
     model: 'gpt-4.1-mini',
-    temperature: 0.2,
+    temperature: 1,
   },
   discord: {},
   report: {
@@ -60,7 +60,7 @@ export const DEFAULT_OPS_SETTINGS = {
   llm: {
     baseUrl: '',
     model: '',
-    temperature: 0.2,
+    temperature: 1,
   },
   context: {
     enabled: true,
@@ -103,7 +103,7 @@ export const DEFAULT_OPS_SETTINGS = {
     safety: {
       minRequestsForActions: 20,
       maxActionsPerRun: 3,
-      channelCooldownMinutes: 60,
+      channelCooldownMinutes: 10,
     },
     protectedChannels: {
       ids: [],
@@ -123,8 +123,8 @@ export const DEFAULT_OPS_SETTINGS = {
     historyLimit: 3,
   },
   storage: {
-    maxReports: 500,
-    maxActionAuditEntries: 5000,
-    maxAppLogEntries: 5000,
+    maxReports: 50,
+    maxActionAuditEntries: 100,
+    maxAppLogEntries: 1000,
   },
 } satisfies OpsSettings
