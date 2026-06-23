@@ -58,6 +58,10 @@ function sseEvent(event: string, data: unknown) {
   return `event: ${event}\ndata: ${JSON.stringify(data)}\n\n`
 }
 
+function sseComment(comment: string) {
+  return `: ${comment}\n\n`
+}
+
 function streamErrorMessage(error: unknown) {
   return error instanceof Error ? error.message : String(error)
 }
@@ -442,8 +446,40 @@ async function handleApi(
       return new Response(
         new ReadableStream({
           async start(controller) {
+            let closed = false
+            let heartbeat: ReturnType<typeof setInterval> | undefined
+            const stopHeartbeat = () => {
+              if (heartbeat) clearInterval(heartbeat)
+              heartbeat = undefined
+            }
+            const markClosed = () => {
+              closed = true
+              stopHeartbeat()
+            }
+            const enqueue = (chunk: string) => {
+              if (closed) return
+              try {
+                controller.enqueue(encoder.encode(chunk))
+              } catch {
+                markClosed()
+              }
+            }
+            const close = () => {
+              if (closed) return
+              markClosed()
+              try {
+                controller.close()
+              } catch {}
+            }
+            const onAbort = () => {
+              markClosed()
+            }
+            req.signal.addEventListener('abort', onAbort, { once: true })
+            heartbeat = setInterval(() => {
+              enqueue(sseComment('ping'))
+            }, 15_000)
             const send = (event: string, data: unknown) => {
-              controller.enqueue(encoder.encode(sseEvent(event, data)))
+              enqueue(sseEvent(event, data))
             }
 
             try {
@@ -458,15 +494,16 @@ async function handleApi(
             } catch (error) {
               send('error', { message: streamErrorMessage(error) })
             } finally {
-              controller.close()
+              req.signal.removeEventListener('abort', onAbort)
+              close()
             }
           },
         }),
         {
           headers: {
             'Content-Type': 'text/event-stream; charset=utf-8',
-            'Cache-Control': 'no-cache',
-            Connection: 'keep-alive',
+            'Cache-Control': 'no-cache, no-transform',
+            'X-Accel-Buffering': 'no',
           },
         }
       )
