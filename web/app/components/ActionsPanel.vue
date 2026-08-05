@@ -110,6 +110,7 @@ function actionTime(action) {
 }
 
 function actionTarget(action) {
+  if (action.username) return action.username
   if (action.channelName) return action.channelName
   if (action.target && !/^channel:\d+$/i.test(action.target)) return action.target
   return props.t('actions.noTarget')

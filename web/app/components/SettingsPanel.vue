@@ -22,6 +22,7 @@ import {
   SlidersHorizontal,
   Trash2,
   WalletCards,
+  UserX,
   LogOut,
   X,
 } from 'lucide-vue-next'
@@ -79,6 +80,11 @@ const permissionRows = computed(() => [
     key: 'deleteChannel',
     icon: Trash2,
     title: props.t('settings.permissions.deleteChannel'),
+  },
+  {
+    key: 'disableUser',
+    icon: UserX,
+    title: props.t('settings.permissions.disableUser'),
   },
 ])
 
@@ -175,6 +181,11 @@ const settingsTabs = computed(() => [
     id: 'activeTesting',
     icon: FlaskConical,
     label: props.t('settings.activeTesting.title'),
+  },
+  {
+    id: 'tokenInspection',
+    icon: UserX,
+    label: props.t('settings.tokenInspection.title'),
   },
   {
     id: 'storage',
@@ -956,6 +967,127 @@ function logout() {
                     :value="settingValue('activeTesting.recoveryThreshold')"
                     @input="update('activeTesting.recoveryThreshold', Number($event.target.value))"
                   />
+                </label>
+              </div>
+            </div>
+          </div>
+
+          <div
+            v-else-if="activeSettingsTab === 'tokenInspection'"
+            class="settings-stack"
+            role="tabpanel"
+          >
+            <div class="settings-control-row">
+              <div class="settings-inline-main">
+                <div class="bento-label">{{ t('settings.tokenInspection.enabled') }}</div>
+                <div class="bento-sub">{{ t('settings.tokenInspection.enabledHint') }}</div>
+              </div>
+              <button
+                class="setting-switch"
+                :class="{ active: settingValue('tokenInspection.enabled') }"
+                type="button"
+                :aria-pressed="settingValue('tokenInspection.enabled')"
+                @click="update('tokenInspection.enabled', !settingValue('tokenInspection.enabled'))"
+              >
+                {{ settingValue('tokenInspection.enabled') ? t('settings.on') : t('settings.off') }}
+              </button>
+            </div>
+
+            <div class="settings-control-row">
+              <div class="settings-inline-main">
+                <div class="bento-label">{{ t('settings.tokenInspection.aiReviewEnabled') }}</div>
+                <div class="bento-sub">{{ t('settings.tokenInspection.aiReviewHint') }}</div>
+              </div>
+              <button
+                class="setting-switch"
+                :class="{ active: settingValue('tokenInspection.aiReviewEnabled') }"
+                type="button"
+                :aria-pressed="settingValue('tokenInspection.aiReviewEnabled')"
+                @click="update('tokenInspection.aiReviewEnabled', !settingValue('tokenInspection.aiReviewEnabled'))"
+              >
+                {{ settingValue('tokenInspection.aiReviewEnabled') ? t('settings.on') : t('settings.off') }}
+              </button>
+            </div>
+
+            <div class="settings-section">
+              <div class="settings-section-title">
+                <UserX :size="18" />
+                <span>{{ t('settings.tokenInspection.policyTitle') }}</span>
+              </div>
+              <div class="settings-number-grid active-testing-grid">
+                <label class="settings-field">
+                  <span>{{ t('settings.tokenInspection.intervalMinutes') }}</span>
+                  <input
+                    type="number"
+                    min="1"
+                    :value="settingValue('tokenInspection.intervalMinutes')"
+                    @input="update('tokenInspection.intervalMinutes', Number($event.target.value))"
+                  />
+                </label>
+                <label class="settings-field">
+                  <span>{{ t('settings.tokenInspection.graceHours') }}</span>
+                  <input
+                    type="number"
+                    min="0"
+                    :value="settingValue('tokenInspection.graceHours')"
+                    @input="update('tokenInspection.graceHours', Number($event.target.value))"
+                  />
+                </label>
+                <label class="settings-field">
+                  <span>{{ t('settings.tokenInspection.maxActionsPerRun') }}</span>
+                  <input
+                    type="number"
+                    min="0"
+                    :value="settingValue('tokenInspection.maxActionsPerRun')"
+                    @input="update('tokenInspection.maxActionsPerRun', Number($event.target.value))"
+                  />
+                </label>
+                <label class="settings-field">
+                  <span>{{ t('settings.tokenInspection.actionCooldownHours') }}</span>
+                  <input
+                    type="number"
+                    min="0"
+                    :value="settingValue('tokenInspection.actionCooldownHours')"
+                    @input="update('tokenInspection.actionCooldownHours', Number($event.target.value))"
+                  />
+                </label>
+                <label class="settings-field">
+                  <span>{{ t('settings.tokenInspection.autoDisableConfidence') }}</span>
+                  <input
+                    type="number"
+                    min="0"
+                    max="1"
+                    step="0.01"
+                    :value="settingValue('tokenInspection.autoDisableConfidence')"
+                    @input="update('tokenInspection.autoDisableConfidence', Number($event.target.value))"
+                  />
+                </label>
+              </div>
+            </div>
+
+            <div class="settings-section">
+              <div class="settings-section-title">
+                <ListChecks :size="18" />
+                <span>{{ t('settings.tokenInspection.namingTitle') }}</span>
+              </div>
+              <div class="settings-llm-grid">
+                <label class="settings-field">
+                  <span>{{ t('settings.tokenInspection.allowedClients') }}</span>
+                  <input
+                    type="text"
+                    :value="settingValue('tokenInspection.allowedClients')?.join(', ')"
+                    @input="update('tokenInspection.allowedClients', parseKeywordInput($event.target.value))"
+                  />
+                  <small>{{ t('settings.tokenInspection.allowedClientsHint') }}</small>
+                </label>
+                <label class="settings-field">
+                  <span>{{ t('settings.tokenInspection.exemptUserGroups') }}</span>
+                  <input
+                    type="text"
+                    :value="settingValue('tokenInspection.exemptUserGroups')?.join(', ')"
+                    @input="update('tokenInspection.exemptUserGroups', parseKeywordInput($event.target.value))"
+                  />
+                  <small>{{ t('settings.tokenInspection.exemptUserGroupsHint') }}</small>
                 </label>
               </div>
             </div>

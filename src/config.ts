@@ -11,6 +11,7 @@ export type AppConfig = {
     extraHeaders: Record<string, string>
     timeoutMs: number
     channelPageSize: number
+    tokenPageSize: number
     logPageSize: number
     logHours: number
     balanceWarningUsd: number
@@ -99,6 +100,10 @@ export function loadConfig(): AppConfig {
       channelPageSize: numberEnv(
         'NEWAPI_CHANNEL_PAGE_SIZE',
         defaults.newApi.channelPageSize
+      ),
+      tokenPageSize: numberEnv(
+        'NEWAPI_TOKEN_PAGE_SIZE',
+        defaults.newApi.tokenPageSize
       ),
       logPageSize: numberEnv(
         'NEWAPI_LOG_PAGE_SIZE',

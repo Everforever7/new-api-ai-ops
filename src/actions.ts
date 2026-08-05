@@ -1,12 +1,25 @@
 import type { AppConfig } from './config'
-import type { Channel, ChannelMemory, HealthSnapshot } from './types/domain'
+import type {
+  AdminToken,
+  Channel,
+  ChannelMemory,
+  HealthSnapshot,
+} from './types/domain'
+import {
+  groupTokenFindingsByUser,
+  inspectTokenNames,
+  matchCurrentTokenEvidence,
+  type TokenInspectionResult,
+  type TokenNameFinding,
+} from './tokenInspection'
+import { reviewAmbiguousTokenNames } from './ai/tokenInspection'
 import { NewApiClient } from './newapi/client'
 import { loadOpsSettings, type OpsSettings } from './settings'
 import { logger } from './logger'
 import { saveChannelMemory } from './testing'
 import {
   appendActionAuditRecord,
-  hasRecentExecutedAction,
+  hasRecentTargetAction,
   listActionAuditRecords,
   pruneActionAuditRecords,
 } from './storage/db'
@@ -24,11 +37,13 @@ export type OpsAction = {
   id: string
   action: string
   rawAction: string
-  source?: 'report' | 'assistant' | 'active_test'
+  source?: 'report' | 'assistant' | 'active_test' | 'token_inspection'
   reportName?: string
   target?: string
   channelId?: number
   channelName?: string
+  userId?: number
+  username?: string
   risk: 'low' | 'medium' | 'high'
   requiresConfirm: boolean
   reason: string
@@ -63,6 +78,9 @@ export type RawAction = {
   channelId?: unknown
   channel_name?: unknown
   channelName?: unknown
+  user_id?: unknown
+  userId?: unknown
+  username?: unknown
   changes?: unknown
   model?: unknown
 }
@@ -95,6 +113,7 @@ const KNOWN_ACTIONS = new Set([
   'update_channel',
   'disable_channel',
   'delete_channel',
+  'disable_user',
 ])
 
 function now() {
@@ -211,6 +230,10 @@ function normalizeActionName(value: unknown) {
     return 'delete_channel'
   }
 
+  if (['disable_user', 'ban_user', 'block_user'].includes(normalized)) {
+    return 'disable_user'
+  }
+
   return normalized || 'unknown'
 }
 
@@ -271,10 +294,11 @@ export function createOpsAction(
   meta: Pick<OpsAction, 'reportName'> = {}
 ): OpsAction {
   const action = normalizeActionName(raw.action)
-  const channelName = readChannelNameFromRaw(raw)
+  const channelName = action === 'disable_user' ? undefined : readChannelNameFromRaw(raw)
+  const rawUsername = typeof raw.username === 'string' ? raw.username.trim() : ''
   const target =
     raw.target === undefined
-      ? channelName
+      ? channelName || rawUsername
       : String(raw.target)
   const channelId =
     action === 'create_channel'
@@ -282,6 +306,14 @@ export function createOpsAction(
       : parseChannelId(raw.channel_id) ??
         parseChannelId(raw.channelId) ??
         parseChannelId(target)
+  const userId =
+    action === 'disable_user'
+      ? parseChannelId(raw.user_id) ?? parseChannelId(raw.userId)
+      : undefined
+  const username =
+    action === 'disable_user'
+      ? rawUsername || (target && !parseChannelId(target) ? target : undefined)
+      : undefined
   const createdAt = now()
 
   return {
@@ -293,6 +325,8 @@ export function createOpsAction(
     target,
     channelId,
     channelName,
+    userId,
+    username,
     risk: normalizeRisk(raw.risk),
     requiresConfirm:
       raw.requires_confirm === true || raw.requiresConfirm === true,
@@ -329,6 +363,7 @@ function permissionKey(action: string): keyof OpsSettings['aiExecution']['permis
   if (action === 'update_channel') return 'updateChannel'
   if (action === 'disable_channel') return 'disableChannel'
   if (action === 'delete_channel') return 'deleteChannel'
+  if (action === 'disable_user') return 'disableUser'
   return undefined
 }
 
@@ -338,6 +373,7 @@ function confirmationKey(action: string): keyof OpsSettings['aiExecution']['conf
   if (action === 'update_channel') return 'updateChannel'
   if (action === 'disable_channel') return 'disableChannel'
   if (action === 'delete_channel') return 'deleteChannel'
+  if (action === 'disable_user') return 'disableUser'
   return undefined
 }
 
@@ -348,6 +384,7 @@ function actionLabel(action: string) {
   if (action === 'update_channel') return '修改渠道'
   if (action === 'disable_channel') return '禁用渠道'
   if (action === 'delete_channel') return '删除渠道'
+  if (action === 'disable_user') return '封禁用户'
   return action
 }
 
@@ -359,6 +396,7 @@ function permissionLabel(
   if (permission === 'updateChannel') return '开启/修改渠道'
   if (permission === 'disableChannel') return '禁用渠道'
   if (permission === 'deleteChannel') return '删除渠道'
+  if (permission === 'disableUser') return '封禁用户'
   return permission
 }
 
@@ -548,13 +586,23 @@ export async function listActionAudit(options: { limit?: number } = {}) {
 }
 
 async function coolingDown(action: OpsAction, settings: OpsSettings) {
-  if (!action.channelId || settings.aiExecution.safety.channelCooldownMinutes <= 0) {
+  const targetType = action.userId ? 'user' : action.channelId ? 'channel' : undefined
+  const targetId = action.userId || action.channelId
+  const cooldownMinutes = action.userId
+    ? settings.tokenInspection.actionCooldownHours * 60
+    : settings.aiExecution.safety.channelCooldownMinutes
+  if (!targetType || !targetId || cooldownMinutes <= 0) {
     return false
   }
 
-  const cutoff =
-    Date.now() - settings.aiExecution.safety.channelCooldownMinutes * 60_000
-  return hasRecentExecutedAction(action.channelId, action.action, cutoff)
+  const cutoff = Date.now() - cooldownMinutes * 60_000
+  return hasRecentTargetAction(
+    targetType,
+    targetId,
+    action.action,
+    cutoff,
+    targetType === 'user'
+  )
 }
 
 function updateAction(
@@ -576,6 +624,77 @@ function withChannelIdentity(action: OpsAction, channel?: Channel) {
   })
 }
 
+function userDisableEvidence(action: OpsAction) {
+  const values = Array.isArray(action.payload?.findings)
+    ? action.payload.findings
+    : []
+  return values.flatMap((value) => {
+    if (!isRecord(value)) return []
+    const tokenId = Number(value.tokenId ?? value.token_id)
+    const tokenName = typeof value.tokenName === 'string'
+      ? value.tokenName
+      : typeof value.token_name === 'string'
+        ? value.token_name
+        : ''
+    if (!Number.isInteger(tokenId) || !tokenName) return []
+    return [{ tokenId, tokenName }]
+  })
+}
+
+async function validateDisableUserAction(
+  action: OpsAction,
+  settings: OpsSettings,
+  client: NewApiClient,
+  loadedTokens?: AdminToken[]
+) {
+  if (!action.userId) {
+    return updateAction(action, {
+      status: 'blocked',
+      statusReason: '封禁用户需要用户 ID',
+    })
+  }
+
+  const evidence = userDisableEvidence(action)
+  if (!evidence.length) {
+    return updateAction(action, {
+      status: 'blocked',
+      statusReason: '封禁用户缺少令牌违规证据',
+    })
+  }
+
+  const allTokens = loadedTokens || (await client.getAdminTokens()).items
+  const tokens = allTokens.filter(
+    (token) => token.user_id === action.userId
+  )
+  const user = tokens[0]
+  if (!user) {
+    return updateAction(action, {
+      status: 'blocked',
+      statusReason: '用户已不存在或已没有可复核令牌',
+    })
+  }
+  if (user.user_status !== 1) {
+    return updateAction(action, {
+      status: 'blocked',
+      statusReason: '用户当前不是启用状态',
+    })
+  }
+
+  const current = inspectTokenNames(tokens, settings.tokenInspection)
+  const stillValid = matchCurrentTokenEvidence(current.findings, evidence)
+  if (!stillValid.length) {
+    return updateAction(action, {
+      status: 'blocked',
+      statusReason: '原令牌违规证据已失效，用户可能已经完成改名或清理',
+    })
+  }
+
+  return updateAction(action, {
+    target: user.username,
+    username: user.username,
+  })
+}
+
 export function sanitizeActionForClient(action: OpsAction): OpsAction {
   return redactSensitiveValue(action) as OpsAction
 }
@@ -586,6 +705,12 @@ async function evaluateAction(
   snapshot: HealthSnapshot,
   client: NewApiClient
 ) {
+  if (action.action === 'disable_user') {
+    return updateAction(action, {
+      status: 'blocked',
+      statusReason: '封禁用户动作只能由令牌策略巡视生成',
+    })
+  }
   if (!settings.aiExecution.enabled) {
     return updateAction(action, {
       status: 'blocked',
@@ -762,6 +887,11 @@ async function executeWithClient(
   if (action.action === 'delete_channel') {
     if (!action.channelId) throw new Error('删除渠道需要渠道 ID')
     return client.deleteChannel(action.channelId)
+  }
+
+  if (action.action === 'disable_user') {
+    if (!action.userId) throw new Error('封禁用户需要用户 ID')
+    return client.manageUser(action.userId, 'disable')
   }
 
   throw new Error(`不支持的动作：${action.action}`)
@@ -1022,6 +1152,142 @@ export async function buildActiveTestActionDrafts(
   return drafts
 }
 
+export type TokenInspectionActionPlan = TokenInspectionResult & {
+  usersFlagged: number
+  findings: TokenNameFinding[]
+  actions: OpsAction[]
+  completedAt: string
+}
+
+export async function buildTokenInspectionActionDrafts(
+  config: AppConfig
+): Promise<TokenInspectionActionPlan> {
+  const settings = await loadOpsSettings()
+  const client = new NewApiClient(config.newApi)
+  const tokens = (await client.getAdminTokens()).items
+  const inspection = inspectTokenNames(tokens, settings.tokenInspection)
+  let findings = inspection.findings
+
+  if (settings.tokenInspection.aiReviewEnabled && findings.some(
+    (finding) => finding.verdict === 'ambiguous'
+  )) {
+    try {
+      findings = await reviewAmbiguousTokenNames(
+        config,
+        findings,
+        settings.tokenInspection.allowedClients
+      )
+    } catch (error) {
+      logger.warn('AI token-name review failed; keeping findings for manual review', error)
+    }
+  }
+
+  const groups = groupTokenFindingsByUser(findings)
+  const drafts: OpsAction[] = []
+  for (const [index, group] of groups
+    .slice(0, settings.tokenInspection.maxActionsPerRun)
+    .entries()) {
+    const names = group.findings
+      .slice(0, 3)
+      .map((finding) => `“${finding.tokenName}”`)
+      .join('、')
+    const action = createOpsAction({
+      action: 'disable_user',
+      target: group.username,
+      user_id: group.userId,
+      username: group.username,
+      risk: 'high',
+      requires_confirm: true,
+      reason: `用户存在 ${group.findings.length} 个不符合令牌命名策略的活动令牌：${names}`,
+      payload: {
+        policyVersion: 'tavern-token-name-v1',
+        findings: group.findings,
+      },
+    }, index, 'token_inspection')
+
+    if (!settings.aiExecution.enabled) {
+      const blocked = updateAction(action, {
+        status: 'blocked',
+        statusReason: 'AI 执行总开关已关闭',
+      })
+      await appendAudit(blocked)
+      drafts.push(blocked)
+      continue
+    }
+    if (!settings.aiExecution.permissions.disableUser) {
+      const blocked = updateAction(action, {
+        status: 'blocked',
+        statusReason: '封禁用户权限已关闭',
+      })
+      await appendAudit(blocked)
+      drafts.push(blocked)
+      continue
+    }
+    if (settings.aiExecution.confirmation.disableUser === 'never') {
+      const blocked = updateAction(action, {
+        status: 'blocked',
+        statusReason: '封禁用户被设置为永不允许',
+      })
+      await appendAudit(blocked)
+      drafts.push(blocked)
+      continue
+    }
+
+    const checked = await validateDisableUserAction(
+      action,
+      settings,
+      client,
+      tokens
+    )
+    if (checked.status === 'blocked') {
+      await appendAudit(checked)
+      drafts.push(checked)
+      continue
+    }
+    if (await coolingDown(checked, settings)) {
+      const blocked = updateAction(checked, {
+        status: 'blocked',
+        statusReason: '该用户的封禁动作仍在冷却时间内',
+      })
+      await appendAudit(blocked)
+      drafts.push(blocked)
+      continue
+    }
+
+    const canAutoDisable =
+      settings.aiExecution.confirmation.disableUser === 'auto' &&
+      group.findings.every(
+        (finding) =>
+          finding.verdict === 'non_compliant' &&
+          finding.confidence >= settings.tokenInspection.autoDisableConfidence
+      )
+    if (canAutoDisable) {
+      drafts.push(await confirmAndExecuteAction(config, updateAction(checked, {
+        status: 'queued',
+        requiresConfirm: false,
+        statusReason: '令牌命名违规达到自动封禁阈值',
+      })))
+      continue
+    }
+
+    drafts.push(updateAction(checked, {
+      status: 'pending_confirmation',
+      requiresConfirm: true,
+      statusReason: group.findings.some((finding) => finding.verdict === 'ambiguous')
+        ? '令牌用途需要人工复核'
+        : '等待人工确认封禁用户',
+    }))
+  }
+
+  return {
+    ...inspection,
+    findings,
+    usersFlagged: groups.length,
+    actions: drafts,
+    completedAt: now(),
+  }
+}
+
 export async function executeActionNow(config: AppConfig, action: OpsAction) {
   const executing = updateAction(action, { status: 'executing' })
   try {
@@ -1064,7 +1330,7 @@ export async function confirmAndExecuteAction(
     await appendAudit(checked)
     return checked
   }
-  return executeActionNow(config, action)
+  return executeActionNow(config, checked)
 }
 
 async function evaluateManualAction(
@@ -1100,6 +1366,18 @@ async function evaluateManualAction(
       status: 'blocked',
       statusReason: `${actionLabel(action.action)}被设置为永不允许`,
     })
+  }
+
+  if (action.action === 'disable_user') {
+    const checked = await validateDisableUserAction(action, settings, client)
+    if (checked.status === 'blocked') return checked
+    if (await coolingDown(checked, settings)) {
+      return updateAction(checked, {
+        status: 'blocked',
+        statusReason: '该用户的封禁动作仍在冷却时间内',
+      })
+    }
+    return checked
   }
 
   if (

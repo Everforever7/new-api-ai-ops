@@ -50,6 +50,7 @@ export type OpsSettings = {
       updateChannel: boolean
       disableChannel: boolean
       deleteChannel: boolean
+      disableUser: boolean
     }
     confirmation: {
       testChannel: ConfirmationStrategy
@@ -57,6 +58,7 @@ export type OpsSettings = {
       updateChannel: ConfirmationStrategy
       disableChannel: ConfirmationStrategy
       deleteChannel: ConfirmationStrategy
+      disableUser: ConfirmationStrategy
     }
     safety: {
       minRequestsForActions: number
@@ -79,6 +81,17 @@ export type OpsSettings = {
     failureThreshold: number
     recoveryThreshold: number
     historyLimit: number
+  }
+  tokenInspection: {
+    enabled: boolean
+    intervalMinutes: number
+    graceHours: number
+    maxActionsPerRun: number
+    actionCooldownHours: number
+    aiReviewEnabled: boolean
+    autoDisableConfidence: number
+    allowedClients: string[]
+    exemptUserGroups: string[]
   }
   storage: {
     maxReports: number
@@ -269,6 +282,7 @@ export function normalizeOpsSettings(
   const safety = readRecord(aiExecution, 'safety')
   const protectedChannels = readRecord(aiExecution, 'protectedChannels')
   const activeTesting = readRecord(root, 'activeTesting')
+  const tokenInspection = readRecord(root, 'tokenInspection')
   const storage = readRecord(root, 'storage')
 
   const nextApiKey = readText(llm, 'apiKey', '', 20_000)
@@ -416,6 +430,11 @@ export function normalizeOpsSettings(
           'deleteChannel',
           defaults.aiExecution.permissions.deleteChannel
         ),
+        disableUser: readBoolean(
+          permissions,
+          'disableUser',
+          defaults.aiExecution.permissions.disableUser
+        ),
       },
       confirmation: {
         testChannel: readStrategy(
@@ -442,6 +461,11 @@ export function normalizeOpsSettings(
           confirmation,
           'deleteChannel',
           defaults.aiExecution.confirmation.deleteChannel
+        ),
+        disableUser: readStrategy(
+          confirmation,
+          'disableUser',
+          defaults.aiExecution.confirmation.disableUser
         ),
       },
       safety: {
@@ -520,6 +544,63 @@ export function normalizeOpsSettings(
         defaults.activeTesting.historyLimit,
         1,
         1000
+      ),
+    },
+    tokenInspection: {
+      enabled: readBoolean(
+        tokenInspection,
+        'enabled',
+        defaults.tokenInspection.enabled
+      ),
+      intervalMinutes: readNumber(
+        tokenInspection,
+        'intervalMinutes',
+        defaults.tokenInspection.intervalMinutes,
+        1,
+        10_080
+      ),
+      graceHours: readNumber(
+        tokenInspection,
+        'graceHours',
+        defaults.tokenInspection.graceHours,
+        0,
+        8_760
+      ),
+      maxActionsPerRun: readNumber(
+        tokenInspection,
+        'maxActionsPerRun',
+        defaults.tokenInspection.maxActionsPerRun,
+        0,
+        1_000
+      ),
+      actionCooldownHours: readNumber(
+        tokenInspection,
+        'actionCooldownHours',
+        defaults.tokenInspection.actionCooldownHours,
+        0,
+        8_760
+      ),
+      aiReviewEnabled: readBoolean(
+        tokenInspection,
+        'aiReviewEnabled',
+        defaults.tokenInspection.aiReviewEnabled
+      ),
+      autoDisableConfidence: readFloat(
+        tokenInspection,
+        'autoDisableConfidence',
+        defaults.tokenInspection.autoDisableConfidence,
+        0,
+        1
+      ),
+      allowedClients: readStringArray(
+        tokenInspection,
+        'allowedClients',
+        defaults.tokenInspection.allowedClients
+      ),
+      exemptUserGroups: readStringArray(
+        tokenInspection,
+        'exemptUserGroups',
+        defaults.tokenInspection.exemptUserGroups
       ),
     },
     storage: {

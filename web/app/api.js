@@ -141,6 +141,13 @@ export function getActions() {
   return api('/api/actions')
 }
 
+export function runTokenInspection() {
+  return api('/api/token-inspection/run', {
+    method: 'POST',
+    body: '{}',
+  })
+}
+
 export function getActionAudit(options = {}) {
   const params = new URLSearchParams()
   if (options.limit) params.set('limit', String(options.limit))

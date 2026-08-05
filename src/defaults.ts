@@ -29,6 +29,7 @@ export const DEFAULT_APP_CONFIG = {
     extraHeaders: {},
     timeoutMs: 20_000,
     channelPageSize: 100,
+    tokenPageSize: 100,
     logPageSize: 100,
     logHours: 1,
     balanceWarningUsd: 5,
@@ -92,6 +93,7 @@ export const DEFAULT_OPS_SETTINGS = {
       updateChannel: true,
       disableChannel: true,
       deleteChannel: true,
+      disableUser: true,
     },
     confirmation: {
       testChannel: 'auto',
@@ -99,6 +101,7 @@ export const DEFAULT_OPS_SETTINGS = {
       updateChannel: 'auto',
       disableChannel: 'auto',
       deleteChannel: 'confirm',
+      disableUser: 'confirm',
     },
     safety: {
       minRequestsForActions: 20,
@@ -121,6 +124,17 @@ export const DEFAULT_OPS_SETTINGS = {
     failureThreshold: 3,
     recoveryThreshold: 1,
     historyLimit: 3,
+  },
+  tokenInspection: {
+    enabled: false,
+    intervalMinutes: 30,
+    graceHours: 24,
+    maxActionsPerRun: 20,
+    actionCooldownHours: 24,
+    aiReviewEnabled: true,
+    autoDisableConfidence: 0.99,
+    allowedClients: ['酒馆', 'tt酒馆'],
+    exemptUserGroups: [],
   },
   storage: {
     maxReports: 50,

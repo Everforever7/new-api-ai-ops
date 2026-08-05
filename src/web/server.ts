@@ -322,6 +322,7 @@ async function handleApi(
       ])
       await runtime.refreshReportScheduler()
       await runtime.refreshActiveTestingScheduler()
+      await runtime.refreshTokenInspectionScheduler()
       return json(saved)
     }
 
@@ -362,6 +363,10 @@ async function handleApi(
           triggeredBy: 'manual',
         })
       )
+    }
+
+    if (url.pathname === '/api/token-inspection/run' && req.method === 'POST') {
+      return json(await runtime.runTokenInspection())
     }
 
     if (url.pathname === '/api/tests/history' && req.method === 'GET') {

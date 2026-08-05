@@ -1,5 +1,6 @@
 import type { AppConfig } from '../config'
 import type {
+  AdminTokenListData,
   ApiEnvelope,
   ChannelListData,
   LogListData,
@@ -133,6 +134,41 @@ export class NewApiClient {
         start_timestamp: startTimestamp,
         end_timestamp: endTimestamp,
       },
+    })
+  }
+
+  async getAdminTokens(): Promise<AdminTokenListData> {
+    const pageSize = Math.min(Math.max(this.config.tokenPageSize, 1), 100)
+    const first = await this.request<AdminTokenListData>('/api/token/admin/', {
+      query: { p: 1, page_size: pageSize },
+    })
+    const total = first.total || first.items.length
+    if (first.items.length >= total) return first
+
+    const pages = Math.ceil(total / pageSize)
+    const rest = await Promise.all(
+      Array.from({ length: pages - 1 }, (_, index) =>
+        this.request<AdminTokenListData>('/api/token/admin/', {
+          query: {
+            p: index + 2,
+            page_size: pageSize,
+          },
+        })
+      )
+    )
+
+    return {
+      ...first,
+      items: [first, ...rest].flatMap((page) => page.items),
+      total,
+    }
+  }
+
+  async manageUser(id: number, action: 'disable' | 'enable') {
+    return this.request<Record<string, unknown>>('/api/user/manage', {
+      method: 'POST',
+      body: { id, action },
+      allowMissingData: true,
     })
   }
 

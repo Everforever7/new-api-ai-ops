@@ -29,6 +29,7 @@ New API AI Ops is a standalone sidecar operations assistant designed for `new-ap
 - 💾 **Report Archive** — All reports are automatically saved to the `reports/` directory
 - 🖥️ **Management Panel** — Built-in lightweight web management panel (Basic Auth)
 - 🧩 **Action Queue** — Converts AI proposals into confirmable, rejectable, auditable operations
+- 🔑 **User Token Inspection** — Checks active-token naming, reviews ambiguous purposes with AI, and drafts user-disable approvals
 - 🛡️ **Execution Guards** — Supports capability switches, manual confirmation, protected channel rules, and cooldowns
 - ⏰ **Scheduled Inspections** — Supports configurable interval-based scheduled inspections
 - 🐳 **Docker Deployment** — GHCR image available, can be deployed alongside `new-api` in the same stack
@@ -139,6 +140,7 @@ bun run build
 | 🔄 Manual Inspection | Trigger a manual check (no Discord by default) |
 | 📄 Report View | View the latest generated operations report |
 | 📡 Channel Snapshot | View sanitized channel information |
+| 🔑 User Tokens | Enforce the device/酒馆-or-tt酒馆/purpose naming policy and draft disable approvals |
 | 🤖 Action Queue | Review AI-proposed actions, execute or reject pending operations |
 | ⚙️ Execution Settings | Configure AI permissions, confirmation strategy, and protected channel rules |
 
@@ -208,6 +210,7 @@ services:
 | Variable | Description | Default |
 |----------|-------------|---------|
 | `NEWAPI_CHANNEL_PAGE_SIZE` | Channel page size | `100` |
+| `NEWAPI_TOKEN_PAGE_SIZE` | Admin token page size | `100` |
 | `NEWAPI_LOG_PAGE_SIZE` | Log page size | `100` |
 | `NEWAPI_LOG_HOURS` | Log collection window (hours) | `1` |
 | `BALANCE_WARNING_USD` | Balance warning threshold (USD) | `5` |
@@ -246,10 +249,11 @@ services:
 
 The current version supports controlled execution with these rules:
 
-- ✅ Supported actions are limited to testing channels, recording low-balance notices, creating channels, updating channels, disabling channels, and deleting channels
+- ✅ Supported actions are limited to testing channels, recording low-balance notices, creating channels, updating channels, disabling channels, deleting channels, and disabling users
 - ⚠️ Creating, updating, disabling, and deleting channels are gated by panel permissions and confirmation strategy
 - 🛡️ Protected channel IDs, groups, tags, names, models, and types are skipped for AI modification
-- 📝 Executed, failed, and rejected operations are recorded in `data/action-audit.jsonl`
+- 🛡️ Administrators, Root, SVIP, and configured exempt user groups never receive disable-user actions
+- 📝 Executed, failed, and rejected operations are recorded in SQLite `data/ops.db`
 - 🧹 Report files and action audit logs can be capped from Settings > Storage
 - 🔀 Discord reports and execution approvals are kept separate
 

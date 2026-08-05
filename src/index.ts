@@ -24,10 +24,12 @@ const runtime = new OpsRuntime(config)
 if (mode === 'start' || mode === 'dev') {
   startPanelServer(config, runtime)
   await runtime.refreshActiveTestingScheduler()
+  await runtime.refreshTokenInspectionScheduler()
   await startScheduler(config, { dryRun }, runtime)
 } else if (mode === 'panel') {
   startPanelServer(config, runtime)
   await runtime.refreshActiveTestingScheduler()
+  await runtime.refreshTokenInspectionScheduler()
 } else {
   await runOnce(config, { dryRun })
 }

@@ -34,6 +34,8 @@ function database() {
       id TEXT PRIMARY KEY,
       action TEXT NOT NULL,
       channel_id INTEGER,
+      target_type TEXT,
+      target_id INTEGER,
       status TEXT NOT NULL,
       created_at TEXT,
       updated_at TEXT,
@@ -93,6 +95,21 @@ function database() {
     );
   `)
 
+  const actionAuditColumns = new Set(
+    (db.query('PRAGMA table_info(action_audit)').all() as Array<Row>)
+      .map((column) => String(column.name || ''))
+  )
+  if (!actionAuditColumns.has('target_type')) {
+    db.exec('ALTER TABLE action_audit ADD COLUMN target_type TEXT')
+  }
+  if (!actionAuditColumns.has('target_id')) {
+    db.exec('ALTER TABLE action_audit ADD COLUMN target_id INTEGER')
+  }
+  db.exec(`
+    CREATE INDEX IF NOT EXISTS idx_action_audit_target_cooldown
+      ON action_audit (target_type, target_id, action, status, executed_at);
+  `)
+
   return db
 }
 
@@ -138,16 +155,22 @@ export function deleteJsonValue(key: string) {
 }
 
 export function appendActionAuditRecord(action: Record<string, unknown>) {
+  const channelId = action.channelId === undefined ? null : Number(action.channelId)
+  const userId = action.userId === undefined ? null : Number(action.userId)
+  const targetType = userId ? 'user' : channelId ? 'channel' : null
+  const targetId = userId || channelId
   database()
     .query(`
       INSERT OR REPLACE INTO action_audit
-        (id, action, channel_id, status, created_at, updated_at, executed_at, audit_time, json)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        (id, action, channel_id, target_type, target_id, status, created_at, updated_at, executed_at, audit_time, json)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `)
     .run(
       String(action.id || ''),
       String(action.action || ''),
-      action.channelId === undefined ? null : Number(action.channelId),
+      channelId,
+      targetType,
+      targetId,
       String(action.status || ''),
       stringOrNull(action.createdAt),
       stringOrNull(action.updatedAt),
@@ -181,22 +204,37 @@ export function pruneActionAuditRecords(maxEntries: number) {
     .run(Math.max(1, Math.floor(maxEntries)))
 }
 
-export function hasRecentExecutedAction(
-  channelId: number,
+export function hasRecentTargetAction(
+  targetType: 'channel' | 'user',
+  targetId: number,
   action: string,
-  cutoffMs: number
+  cutoffMs: number,
+  includeRejected = false
 ) {
   const row = database()
     .query(`
       SELECT 1 FROM action_audit
-      WHERE channel_id = ?
+      WHERE (
+          (target_type = ? AND target_id = ?)
+          OR (? = 'channel' AND target_type IS NULL AND channel_id = ?)
+        )
         AND action = ?
-        AND status = 'executed'
-        AND executed_at IS NOT NULL
+        AND (
+          status = 'executed'
+          OR (? = 1 AND status = 'rejected')
+        )
         AND audit_time >= ?
       LIMIT 1
     `)
-    .get(channelId, action, cutoffMs)
+    .get(
+      targetType,
+      targetId,
+      targetType,
+      targetId,
+      action,
+      includeRejected ? 1 : 0,
+      cutoffMs
+    )
   return Boolean(row)
 }
 

@@ -72,6 +72,27 @@ export type LogStats = {
   tpm?: number
 }
 
+export type AdminToken = {
+  id: number
+  user_id: number
+  name: string
+  status: number
+  created_time: number
+  accessed_time: number
+  username: string
+  user_status: number
+  user_role: number
+  user_group: string
+  token_group: string
+}
+
+export type AdminTokenListData = {
+  items: AdminToken[]
+  total: number
+  page?: number
+  page_size?: number
+}
+
 export type ProposedAction = {
   action: string
   target?: string

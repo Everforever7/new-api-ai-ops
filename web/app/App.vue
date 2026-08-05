@@ -9,6 +9,7 @@ import {
   Settings2,
   Bot,
   Clock,
+  KeyRound,
 } from 'lucide-vue-next'
 import {
   clearStoredAuth,
@@ -26,6 +27,7 @@ import {
   getStatus,
   runCheck as requestRunCheck,
   runChannelTests as requestRunChannelTests,
+  runTokenInspection as requestRunTokenInspection,
   saveChannelMemory as requestSaveChannelMemory,
   saveSettings as requestSaveSettings,
   resetAssistantSession as requestResetAssistantSession,
@@ -44,6 +46,7 @@ import ChannelsTable from './components/ChannelsTable.vue'
 import SettingsPanel from './components/SettingsPanel.vue'
 import ErrorToast from './components/ErrorToast.vue'
 import ActionsPanel from './components/ActionsPanel.vue'
+import TokenInspectionPanel from './components/TokenInspectionPanel.vue'
 
 const STORAGE_KEYS = {
   locale: 'new-api-ai-ops:locale',
@@ -65,6 +68,7 @@ const actionAudit = ref([])
 const errorToasts = ref([])
 const refreshing = ref(false)
 const runningCheck = ref(false)
+const tokenInspectionRunning = ref(false)
 const settingsLoading = ref(false)
 const settingsSaving = ref(false)
 const settingsSavedAt = ref('')
@@ -90,6 +94,7 @@ const tabs = computed(() => [
   { id: 'assistant', label: t('tabs.assistant'), icon: MessageCircle },
   { id: 'report', label: t('tabs.report'), icon: FileText },
   { id: 'channels', label: t('tabs.channels'), icon: Radio },
+  { id: 'tokenInspection', label: t('tabs.tokenInspection'), icon: KeyRound },
   { id: 'actions', label: t('tabs.actions'), icon: Bot },
   { id: 'settings', label: t('tabs.settings'), icon: Settings2 },
 ])
@@ -572,6 +577,23 @@ async function runManualCheck() {
   }
 }
 
+async function runTokenInspection() {
+  tokenInspectionRunning.value = true
+  try {
+    const result = await requestRunTokenInspection()
+    status.value = {
+      ...(status.value || {}),
+      lastTokenInspection: result,
+      tokenInspectionRunning: false,
+    }
+    await loadActions()
+  } catch (error) {
+    notifyError('errors.tokenInspectionRunFailed', error)
+  } finally {
+    tokenInspectionRunning.value = false
+  }
+}
+
 async function loadSettings() {
   settingsLoading.value = true
   try {
@@ -894,6 +916,7 @@ function resetAuthenticatedState() {
   settingsSavedAt.value = ''
   refreshing.value = false
   runningCheck.value = false
+  tokenInspectionRunning.value = false
   settingsLoading.value = false
   settingsSaving.value = false
   actionsLoading.value = false
@@ -1033,6 +1056,16 @@ onBeforeUnmount(() => {
           @testCreateAction="testCreateAction"
           @rejectAction="rejectAction"
           @refreshActions="loadActions"
+        />
+
+        <TokenInspectionPanel
+          v-else-if="activeTab === 'tokenInspection'"
+          key="tokenInspection"
+          :result="status?.lastTokenInspection"
+          :running="tokenInspectionRunning || status?.tokenInspectionRunning"
+          :formatDate="formatDate"
+          :t="t"
+          @runInspection="runTokenInspection"
         />
 
         <SettingsPanel

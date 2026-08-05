@@ -11,12 +11,14 @@ import {
   buildActiveTestActionDrafts,
   buildAssistantActionDrafts,
   buildActionQueue,
+  buildTokenInspectionActionDrafts,
   confirmAndExecuteAction,
   createOpsAction,
   isOpenAction,
   rejectAction,
   sanitizeActionForClient,
   type OpsAction,
+  type TokenInspectionActionPlan,
 } from './actions'
 import {
   createAssistantMessage,
@@ -35,6 +37,7 @@ import {
 import { loadJsonValue, saveJsonValue } from './storage/db'
 
 const ACTION_QUEUE_KEY = 'action_queue'
+const TOKEN_INSPECTION_RESULT_KEY = 'token_inspection_last_result'
 const MAX_PERSISTED_ACTIONS = 300
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -109,6 +112,13 @@ function isActionLike(value: unknown): value is OpsAction {
   )
 }
 
+function loadPersistedTokenInspection() {
+  const value = loadJsonValue<TokenInspectionActionPlan>(TOKEN_INSPECTION_RESULT_KEY)
+  return value && Array.isArray(value.findings) && typeof value.completedAt === 'string'
+    ? value
+    : undefined
+}
+
 export class OpsRuntime {
   private running = false
   private reportSchedulerActive = false
@@ -118,6 +128,10 @@ export class OpsRuntime {
   private activeTestingRunning = false
   private activeTestingTimer?: ReturnType<typeof setInterval>
   private activeTestingScheduleKey = ''
+  private tokenInspectionRunning = false
+  private tokenInspectionTimer?: ReturnType<typeof setInterval>
+  private tokenInspectionScheduleKey = ''
+  private lastTokenInspection?: TokenInspectionActionPlan = loadPersistedTokenInspection()
   private lastResult?: RunReportResult
   private lastError?: string
   private actions: OpsAction[] = loadPersistedActions()
@@ -147,6 +161,13 @@ export class OpsRuntime {
       lastReport: this.lastResult?.report,
       lastActions: this.getActions(),
       activeTestingRunning: this.activeTestingRunning,
+      tokenInspectionRunning: this.tokenInspectionRunning,
+      lastTokenInspection: this.lastTokenInspection
+        ? {
+            ...this.lastTokenInspection,
+            actions: this.lastTokenInspection.actions.map(sanitizeActionForClient),
+          }
+        : undefined,
     }
   }
 
@@ -249,6 +270,82 @@ export class OpsRuntime {
     logger.info(
       `active channel testing scheduled; interval=${settings.activeTesting.intervalMinutes}m`
     )
+  }
+
+  async refreshTokenInspectionScheduler() {
+    const settings = await loadOpsSettings()
+    const scheduleKey = JSON.stringify(settings.tokenInspection)
+    if (scheduleKey === this.tokenInspectionScheduleKey) return
+
+    if (this.tokenInspectionTimer) {
+      clearInterval(this.tokenInspectionTimer)
+      this.tokenInspectionTimer = undefined
+    }
+
+    this.tokenInspectionScheduleKey = scheduleKey
+    if (!settings.tokenInspection.enabled) {
+      logger.info('user token inspection disabled')
+      return
+    }
+
+    const intervalMs =
+      Math.max(1, settings.tokenInspection.intervalMinutes) * 60 * 1000
+    this.tokenInspectionTimer = setInterval(() => {
+      void this.runScheduledTokenInspection()
+    }, intervalMs)
+    logger.info(
+      `user token inspection scheduled; interval=${settings.tokenInspection.intervalMinutes}m`
+    )
+  }
+
+  private async runScheduledTokenInspection() {
+    try {
+      await this.runTokenInspection()
+    } catch (error) {
+      logger.error('scheduled user token inspection failed', error)
+    }
+  }
+
+  async runTokenInspection() {
+    if (this.tokenInspectionRunning) {
+      throw new Error('user token inspection is already running')
+    }
+
+    this.tokenInspectionRunning = true
+    try {
+      logger.info('running user token-name inspection')
+      const result = await buildTokenInspectionActionDrafts(this.config)
+      const actions = result.actions.filter(
+        (action) =>
+          !isOpenAction(action) ||
+          !this.actions.some(
+            (existing) =>
+              isOpenAction(existing) &&
+              existing.action === action.action &&
+              existing.userId === action.userId
+          )
+      )
+      this.actions = [
+        ...actions.filter(isOpenAction),
+        ...this.actions,
+      ]
+      await this.persistActions()
+      this.lastTokenInspection = { ...result, actions }
+      saveJsonValue(TOKEN_INSPECTION_RESULT_KEY, this.lastTokenInspection)
+      logger.info('user token-name inspection completed', {
+        scannedTokens: result.scannedTokens,
+        inspectedTokens: result.inspectedTokens,
+        findings: result.findings.length,
+        usersFlagged: result.usersFlagged,
+        actions: actions.length,
+      })
+      return {
+        ...result,
+        actions: actions.map(sanitizeActionForClient),
+      }
+    } finally {
+      this.tokenInspectionRunning = false
+    }
   }
 
   private async runScheduledChannelTests() {
