@@ -147,10 +147,11 @@ bun run build
 ### AI User Token Inspection
 
 - By default, every 60 minutes it reads all eligible active tokens in the current database, rather than only users with recent calls.
-- Names must communicate a device or runtime location, the `酒馆`/`tt酒馆` client-use family, and a concrete purpose. Order, spacing, case, and separators are flexible, and aliases such as `ST`, `SillyTavern`, and `TauriTavern` are recognized.
+- AI routes by each token's `token_group`: `default` requires a device/runtime location, the `酒馆`/`tt酒馆` family, and a concrete purpose; `代码` only requires an IDE/development tool or environment and its purpose, such as `VSCode coding`, `Cursor project development`, or `PyCharm script debugging`. Order, spacing, case, and separators are flexible.
+- Other token groups always enter manual review and never become direct-block candidates; the inspection panel displays the token group.
 - Each AI request includes at most 1,000 token IDs, names, and minimal user metadata—never actual token secrets. The AI returns anomalies only, and invalid responses trigger smaller retry batches.
 - Missing or ambiguous information becomes a manual-review finding. Clear block candidates receive an independent second AI decision.
-- Multiple bad tokens are grouped into one user action. Direct execution requires two confirming AI passes, the configured confidence threshold, and the disable-user confirmation strategy set to automatic; manual approval remains the default.
+- Multiple bad tokens are grouped into one user action. Direct execution requires two confirming AI passes, the configured confidence threshold, and the disable-user confirmation strategy set to automatic. Token ID, name, and group are revalidated before execution; manual approval remains the default.
 
 ## 🐳 Docker Deployment
 

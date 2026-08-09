@@ -5,6 +5,7 @@ import {
   matchCurrentTokenEvidence,
   selectTokenInspectionCandidates,
   summarizeUserTokenFindings,
+  tokenPolicyRouteForGroup,
 } from './tokenInspection'
 
 function token(overrides: Record<string, unknown> = {}) {
@@ -51,7 +52,31 @@ describe('selectTokenInspectionCandidates', () => {
     expect(result.candidates.map((candidate) => candidate.tokenName)).toEqual(
       names
     )
+    expect(result.candidates.every(
+      (candidate) => candidate.tokenGroup === 'default'
+    )).toBe(true)
     expect(result.inspectedTokens).toBe(4)
+  })
+
+  test('routes only the exact 代码 token group to the code naming policy', () => {
+    expect(tokenPolicyRouteForGroup('default')).toBe('tavern')
+    expect(tokenPolicyRouteForGroup(' DEFAULT ')).toBe('tavern')
+    expect(tokenPolicyRouteForGroup('代码')).toBe('code')
+    expect(tokenPolicyRouteForGroup(' 代码 ')).toBe('code')
+    expect(tokenPolicyRouteForGroup('code')).toBe('manual_review')
+    expect(tokenPolicyRouteForGroup('其他')).toBe('manual_review')
+  })
+
+  test('treats a missing token group as an unknown group for manual review', () => {
+    const result = selectTokenInspectionCandidates(
+      [token({ token_group: undefined })],
+      policy
+    )
+
+    expect(result.candidates[0]?.tokenGroup).toBe('')
+    expect(tokenPolicyRouteForGroup(
+      result.candidates[0]?.tokenGroup || ''
+    )).toBe('manual_review')
   })
 
   test('skips disabled and protected users before sending names to AI', () => {
@@ -89,6 +114,7 @@ test('groups multiple AI findings into one user review', () => {
     username: 'same-user',
     userGroup: 'default',
     userRole: 1,
+    tokenGroup: 'default',
     verdict: 'ambiguous' as const,
     severity: 'review' as const,
     confidence: 0.9,
@@ -111,6 +137,7 @@ test('only twice-confirmed high-confidence blocks qualify a user for auto-disabl
     username: 'same-user',
     userGroup: 'default',
     userRole: 1,
+    tokenGroup: 'default',
     reasonCode: 'other_client',
     violations: ['明确用于其他客户端'],
   }
@@ -176,7 +203,11 @@ test('creates a user-targeted disable action without channel identity', () => {
       requires_confirm: true,
       reason: 'invalid token name',
       payload: {
-        findings: [{ tokenId: 91, tokenName: 'bad-name' }],
+        findings: [{
+          tokenId: 91,
+          tokenName: 'bad-name',
+          tokenGroup: 'default',
+        }],
       },
     },
     0,
@@ -189,20 +220,32 @@ test('creates a user-targeted disable action without channel identity', () => {
   expect(action.channelName).toBeUndefined()
 })
 
-test('invalidates approval evidence after the token name changes', () => {
+test('invalidates approval evidence after the token name or group changes', () => {
   const current = [{
     tokenId: 61,
     userId: 12,
     username: 'renamed-user',
     tokenName: 'still-bad-but-different',
+    tokenGroup: '代码',
     userGroup: 'default',
     userRole: 1,
   }]
 
   expect(matchCurrentTokenEvidence(current, [
-    { tokenId: 61, tokenName: 'old-bad-name' },
+    { tokenId: 61, tokenName: 'old-bad-name', tokenGroup: '代码' },
   ])).toEqual([])
   expect(matchCurrentTokenEvidence(current, [
-    { tokenId: 61, tokenName: 'still-bad-but-different' },
+    {
+      tokenId: 61,
+      tokenName: 'still-bad-but-different',
+      tokenGroup: 'default',
+    },
+  ])).toEqual([])
+  expect(matchCurrentTokenEvidence(current, [
+    {
+      tokenId: 61,
+      tokenName: 'still-bad-but-different',
+      tokenGroup: '代码',
+    },
   ])).toEqual(current)
 })

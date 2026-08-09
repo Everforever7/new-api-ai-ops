@@ -652,8 +652,13 @@ function userDisableEvidence(
       : typeof value.token_name === 'string'
         ? value.token_name
         : ''
-    if (!Number.isInteger(tokenId) || !tokenName) return []
-    return [{ tokenId, tokenName }]
+    const tokenGroup = typeof value.tokenGroup === 'string'
+      ? value.tokenGroup
+      : typeof value.token_group === 'string'
+        ? value.token_group
+        : ''
+    if (!Number.isInteger(tokenId) || !tokenName || !tokenGroup) return []
+    return [{ tokenId, tokenName, tokenGroup }]
   })
 }
 
@@ -706,7 +711,7 @@ async function validateDisableUserAction(
   if (!stillValid.length) {
     return updateAction(action, {
       status: 'blocked',
-      statusReason: '原令牌违规证据已失效，用户可能已经完成改名或清理',
+      statusReason: '原令牌违规证据已失效，用户可能已经完成改名、换组或清理',
     })
   }
 
@@ -1211,7 +1216,7 @@ export async function buildTokenInspectionActionDrafts(
     )
     const names = group.findings
       .slice(0, 3)
-      .map((finding) => `“${finding.tokenName}”`)
+      .map((finding) => `“${finding.tokenName}”[${finding.tokenGroup}]`)
       .join('、')
     const decisionSummary = [
       findingSummary.verifiedBlockCount
@@ -1232,7 +1237,7 @@ export async function buildTokenInspectionActionDrafts(
       requires_confirm: true,
       reason: `AI 语义巡视发现 ${group.findings.length} 个异常活动令牌（${decisionSummary}）：${names}`,
       payload: {
-        policyVersion: 'tavern-token-name-v2',
+        policyVersion: 'token-name-group-routing-v3',
         findings: group.findings,
       },
     }, index, 'token_inspection')

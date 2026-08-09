@@ -10,11 +10,14 @@ export type TokenInspectionPolicy = {
   graceHours: number
 }
 
+export type TokenPolicyRoute = 'tavern' | 'code' | 'manual_review'
+
 export type TokenInspectionCandidate = {
   tokenId: number
   userId: number
   username: string
   tokenName: string
+  tokenGroup: string
   userGroup: string
   userRole: number
 }
@@ -33,6 +36,7 @@ export type TokenNameFinding = {
   userId: number
   username: string
   tokenName: string
+  tokenGroup: string
   userGroup: string
   userRole: number
   verdict: 'ambiguous' | 'non_compliant'
@@ -54,6 +58,7 @@ export type UserTokenFindings = {
 export type TokenFindingEvidence = {
   tokenId: number
   tokenName: string
+  tokenGroup: string
 }
 
 function normalizedText(value: string) {
@@ -63,6 +68,15 @@ function normalizedText(value: string) {
 function matchesAny(value: string, candidates: string[]) {
   const normalized = normalizedText(value)
   return candidates.some((candidate) => normalizedText(candidate) === normalized)
+}
+
+export function tokenPolicyRouteForGroup(
+  tokenGroup: string
+): TokenPolicyRoute {
+  const normalized = normalizedText(tokenGroup)
+  if (normalized === 'default') return 'tavern'
+  if (tokenGroup.trim() === '代码') return 'code'
+  return 'manual_review'
 }
 
 function isProtected(token: AdminToken, policy: TokenInspectionPolicy) {
@@ -111,6 +125,7 @@ export function selectTokenInspectionCandidates(
       userId: token.user_id,
       username: token.username,
       tokenName: token.name,
+      tokenGroup: String(token.token_group || '').trim(),
       userGroup: token.user_group,
       userRole: token.user_role,
     })
@@ -169,13 +184,18 @@ export function summarizeUserTokenFindings(
 }
 
 export function matchCurrentTokenEvidence(
-  findings: Array<Pick<TokenInspectionCandidate, 'tokenId' | 'tokenName'>>,
+  findings: Array<Pick<
+    TokenInspectionCandidate,
+    'tokenId' | 'tokenName' | 'tokenGroup'
+  >>,
   evidence: TokenFindingEvidence[]
 ) {
   return findings.filter((finding) =>
     evidence.some(
       (item) =>
-        item.tokenId === finding.tokenId && item.tokenName === finding.tokenName
+        item.tokenId === finding.tokenId &&
+        item.tokenName === finding.tokenName &&
+        normalizedText(item.tokenGroup) === normalizedText(finding.tokenGroup)
     )
   )
 }

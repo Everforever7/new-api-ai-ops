@@ -79,6 +79,7 @@ function verificationState(finding) {
               <tr>
                 <th>{{ t('tokenInspection.user') }}</th>
                 <th>{{ t('tokenInspection.tokenName') }}</th>
+                <th>{{ t('tokenInspection.tokenGroup') }}</th>
                 <th>{{ t('tokenInspection.severity') }}</th>
                 <th>{{ t('tokenInspection.verification') }}</th>
                 <th>{{ t('tokenInspection.reason') }}</th>
@@ -91,6 +92,7 @@ function verificationState(finding) {
                   <div class="settings-help-text">#{{ finding.userId }}</div>
                 </td>
                 <td><code>{{ finding.tokenName }}</code></td>
+                <td><code>{{ finding.tokenGroup || t('common.emptyValue') }}</code></td>
                 <td>
                   <span
                     class="status-pill compact"

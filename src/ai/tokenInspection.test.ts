@@ -1,5 +1,6 @@
 import { expect, test } from 'bun:test'
 import {
+  buildTokenReviewItems,
   reviewCandidatesWithFallback,
   validateBlockVerificationResponse,
   validateIssueOnlyResponse,
@@ -11,6 +12,7 @@ test('accepts an issue-only response while treating omitted tokens as compliant'
     userId: tokenId,
     username: `user-${tokenId}`,
     tokenName: `name-${tokenId}`,
+    tokenGroup: 'default',
     userGroup: 'default',
     userRole: 1,
   }))
@@ -45,12 +47,96 @@ test('accepts an issue-only response while treating omitted tokens as compliant'
   ])
 })
 
+test('sends the token group and backend-selected policy route to AI', () => {
+  const candidates = [
+    { tokenId: 1, tokenGroup: 'default' },
+    { tokenId: 2, tokenGroup: '代码' },
+    { tokenId: 3, tokenGroup: 'code' },
+  ].map(({ tokenId, tokenGroup }) => ({
+    tokenId,
+    userId: tokenId,
+    username: `user-${tokenId}`,
+    tokenName: `name-${tokenId}`,
+    tokenGroup,
+    userGroup: 'default',
+    userRole: 1,
+  }))
+
+  expect(buildTokenReviewItems(candidates)).toEqual([
+    { token_id: 1, user_id: 1, name: 'name-1', token_group: 'default', policy: 'tavern' },
+    { token_id: 2, user_id: 2, name: 'name-2', token_group: '代码', policy: 'code' },
+    { token_id: 3, user_id: 3, name: 'name-3', token_group: 'code', policy: 'manual_review' },
+  ])
+})
+
+test('forces an omitted unknown token group into manual review', () => {
+  const candidate = {
+    tokenId: 8,
+    userId: 8,
+    username: 'user-8',
+    tokenName: 'some-purpose',
+    tokenGroup: '其他',
+    userGroup: 'default',
+    userRole: 1,
+  }
+
+  const findings = validateIssueOnlyResponse({
+    review_id: 'review-unknown-group',
+    processed_count: 1,
+    issues: [],
+  }, {
+    reviewId: 'review-unknown-group',
+    candidates: [candidate],
+  })
+
+  expect(findings).toEqual([{
+    ...candidate,
+    verdict: 'ambiguous',
+    severity: 'review',
+    confidence: 1,
+    reasonCode: 'unsupported_token_group',
+    violations: ['令牌分组“其他”未配置命名策略，需要人工复核'],
+    blockVerified: false,
+  }])
+})
+
+test('downgrades an AI block for an unknown token group to manual review', () => {
+  const candidate = {
+    tokenId: 9,
+    userId: 9,
+    username: 'user-9',
+    tokenName: 'unrecognized-group-name',
+    tokenGroup: '其他',
+    userGroup: 'default',
+    userRole: 1,
+  }
+
+  const [finding] = validateIssueOnlyResponse({
+    review_id: 'review-unknown-block',
+    processed_count: 1,
+    issues: [{
+      token_id: 9,
+      severity: 'block',
+      confidence: 0.999,
+      reason_code: 'unrelated_usage',
+      reason: '模型认为用途不相关',
+    }],
+  }, {
+    reviewId: 'review-unknown-block',
+    candidates: [candidate],
+  })
+
+  expect(finding?.severity).toBe('review')
+  expect(finding?.blockVerified).toBe(false)
+})
+
 test('downgrades a low-confidence block label to manual review', () => {
   const candidate = {
     tokenId: 7,
     userId: 7,
     username: 'user-7',
     tokenName: 'uncertain-name',
+    tokenGroup: 'default',
     userGroup: 'default',
     userRole: 1,
   }
@@ -80,6 +166,7 @@ test('splits a failed 1000-token review down to complete 250-token retries', asy
     userId: index + 1,
     username: `user-${index + 1}`,
     tokenName: `name-${index + 1}`,
+    tokenGroup: 'default',
     userGroup: 'default',
     userRole: 1,
   }))
@@ -114,6 +201,7 @@ test('requires a second-pass decision for every direct-block candidate', () => {
     userId: tokenId,
     username: `user-${tokenId}`,
     tokenName: `bad-${tokenId}`,
+    tokenGroup: 'default',
     userGroup: 'default',
     userRole: 1,
   }))
