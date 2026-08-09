@@ -125,7 +125,7 @@ export function selectTokenInspectionCandidates(
       userId: token.user_id,
       username: token.username,
       tokenName: token.name,
-      tokenGroup: String(token.token_group || '').trim(),
+      tokenGroup: String(token.token_group || token.user_group || '').trim(),
       userGroup: token.user_group,
       userRole: token.user_role,
     })

@@ -47,6 +47,52 @@ test('accepts an issue-only response while treating omitted tokens as compliant'
   ])
 })
 
+test('ignores hallucinated issue IDs outside the current batch', () => {
+  const candidate = {
+    tokenId: 1,
+    userId: 1,
+    username: 'user-1',
+    tokenName: '本地酒馆RP',
+    tokenGroup: 'default',
+    userGroup: 'default',
+    userRole: 1,
+  }
+
+  const findings = validateIssueOnlyResponse({
+    review_id: 'review-extra-id',
+    processed_count: 1,
+    issues: [
+      {
+        token_id: 7550,
+        severity: 'block',
+        confidence: 0.999,
+        reason_code: 'hallucinated',
+        reason: '不属于当前批次',
+      },
+      {
+        token_id: 1,
+        severity: 'review',
+        confidence: 0.9,
+        reason_code: 'ambiguous_purpose',
+        reason: '用途需要人工确认',
+      },
+    ],
+  }, {
+    reviewId: 'review-extra-id',
+    candidates: [candidate],
+  })
+
+  expect(findings).toEqual([{
+    ...candidate,
+    verdict: 'ambiguous',
+    severity: 'review',
+    confidence: 0.9,
+    reasonCode: 'ambiguous_purpose',
+    violations: ['用途需要人工确认'],
+    blockVerified: false,
+  }])
+})
+
 test('sends the token group and backend-selected policy route to AI', () => {
   const candidates = [
     { tokenId: 1, tokenGroup: 'default' },

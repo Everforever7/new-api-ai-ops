@@ -42,11 +42,11 @@ export function validateIssueOnlyResponse(
     context.candidates.map((candidate) => [candidate.tokenId, candidate])
   )
   const seen = new Set<number>()
-  const findings = value.issues.map((issue) => {
+  const findings = value.issues.flatMap((issue) => {
     if (!isRecord(issue)) throw new Error('AI token review issue must be an object')
     const tokenId = Number(issue.token_id ?? issue.tokenId)
     const candidate = candidateById.get(tokenId)
-    if (!candidate) throw new Error(`AI token review returned unknown token_id ${tokenId}`)
+    if (!candidate) return []
     if (seen.has(tokenId)) {
       throw new Error(`AI token review returned duplicate token_id ${tokenId}`)
     }
@@ -76,7 +76,7 @@ export function validateIssueOnlyResponse(
       ? 'review'
       : validRequestedSeverity
 
-    return {
+    return [{
       ...candidate,
       verdict: severity === 'block'
         ? 'non_compliant' as const
@@ -86,7 +86,7 @@ export function validateIssueOnlyResponse(
       reasonCode,
       violations: [reason],
       blockVerified: false,
-    }
+    }]
   })
 
   for (const candidate of context.candidates) {

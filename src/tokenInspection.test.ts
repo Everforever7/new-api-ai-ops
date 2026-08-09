@@ -67,15 +67,24 @@ describe('selectTokenInspectionCandidates', () => {
     expect(tokenPolicyRouteForGroup('其他')).toBe('manual_review')
   })
 
-  test('treats a missing token group as an unknown group for manual review', () => {
+  test('inherits the user group when the token group is empty', () => {
     const result = selectTokenInspectionCandidates(
       [token({ token_group: undefined })],
       policy
     )
 
-    expect(result.candidates[0]?.tokenGroup).toBe('')
+    expect(result.candidates[0]?.tokenGroup).toBe('default')
     expect(tokenPolicyRouteForGroup(
       result.candidates[0]?.tokenGroup || ''
+    )).toBe('tavern')
+
+    const custom = selectTokenInspectionCandidates(
+      [token({ token_group: '', user_group: 'RP' })],
+      policy
+    )
+    expect(custom.candidates[0]?.tokenGroup).toBe('RP')
+    expect(tokenPolicyRouteForGroup(
+      custom.candidates[0]?.tokenGroup || ''
     )).toBe('manual_review')
   })
 
