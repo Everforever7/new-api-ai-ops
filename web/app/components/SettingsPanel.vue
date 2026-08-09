@@ -993,22 +993,6 @@ function logout() {
               </button>
             </div>
 
-            <div class="settings-control-row">
-              <div class="settings-inline-main">
-                <div class="bento-label">{{ t('settings.tokenInspection.aiReviewEnabled') }}</div>
-                <div class="bento-sub">{{ t('settings.tokenInspection.aiReviewHint') }}</div>
-              </div>
-              <button
-                class="setting-switch"
-                :class="{ active: settingValue('tokenInspection.aiReviewEnabled') }"
-                type="button"
-                :aria-pressed="settingValue('tokenInspection.aiReviewEnabled')"
-                @click="update('tokenInspection.aiReviewEnabled', !settingValue('tokenInspection.aiReviewEnabled'))"
-              >
-                {{ settingValue('tokenInspection.aiReviewEnabled') ? t('settings.on') : t('settings.off') }}
-              </button>
-            </div>
-
             <div class="settings-section">
               <div class="settings-section-title">
                 <UserX :size="18" />
@@ -1055,7 +1039,7 @@ function logout() {
                   <span>{{ t('settings.tokenInspection.autoDisableConfidence') }}</span>
                   <input
                     type="number"
-                    min="0"
+                    min="0.98"
                     max="1"
                     step="0.01"
                     :value="settingValue('tokenInspection.autoDisableConfidence')"

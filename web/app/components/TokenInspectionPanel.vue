@@ -9,6 +9,19 @@ defineProps({
 })
 
 const emit = defineEmits(['runInspection'])
+
+function findingSeverity(finding) {
+  if (finding?.severity === 'block' || finding?.severity === 'review') {
+    return finding.severity
+  }
+  return finding?.verdict === 'non_compliant' ? 'block' : 'review'
+}
+
+function verificationState(finding) {
+  return findingSeverity(finding) === 'block' && finding?.blockVerified === true
+    ? 'verified'
+    : 'manual'
+}
 </script>
 
 <template>
@@ -22,6 +35,7 @@ const emit = defineEmits(['runInspection'])
             result
               ? t('tokenInspection.summary', {
                   tokens: result.inspectedTokens,
+                  issues: result.findings?.length || 0,
                   users: result.usersFlagged,
                 })
               : t('tokenInspection.notRun')
@@ -65,7 +79,8 @@ const emit = defineEmits(['runInspection'])
               <tr>
                 <th>{{ t('tokenInspection.user') }}</th>
                 <th>{{ t('tokenInspection.tokenName') }}</th>
-                <th>{{ t('tokenInspection.verdict') }}</th>
+                <th>{{ t('tokenInspection.severity') }}</th>
+                <th>{{ t('tokenInspection.verification') }}</th>
                 <th>{{ t('tokenInspection.reason') }}</th>
               </tr>
             </thead>
@@ -77,11 +92,15 @@ const emit = defineEmits(['runInspection'])
                 </td>
                 <td><code>{{ finding.tokenName }}</code></td>
                 <td>
-                  <span class="status-pill compact warn">
+                  <span
+                    class="status-pill compact"
+                    :class="findingSeverity(finding) === 'block' ? 'danger' : 'warn'"
+                  >
                     <ShieldAlert :size="14" />
-                    {{ t(`tokenInspection.verdicts.${finding.verdict}`) }}
+                    {{ t(`tokenInspection.severities.${findingSeverity(finding)}`) }}
                   </span>
                 </td>
+                <td>{{ t(`tokenInspection.verifications.${verificationState(finding)}`) }}</td>
                 <td>{{ finding.violations.join('；') }}</td>
               </tr>
             </tbody>

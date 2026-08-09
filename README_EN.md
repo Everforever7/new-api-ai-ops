@@ -29,7 +29,7 @@ New API AI Ops is a standalone sidecar operations assistant designed for `new-ap
 - 💾 **Report Archive** — All reports are automatically saved to the `reports/` directory
 - 🖥️ **Management Panel** — Built-in lightweight web management panel (Basic Auth)
 - 🧩 **Action Queue** — Converts AI proposals into confirmable, rejectable, auditable operations
-- 🔑 **User Token Inspection** — Checks active-token naming, reviews ambiguous purposes with AI, and drafts user-disable approvals
+- 🔑 **User Token Inspection** — Semantically reviews every active token with AI, returns anomalies only, and groups review or disable actions by user
 - 🛡️ **Execution Guards** — Supports capability switches, manual confirmation, protected channel rules, and cooldowns
 - ⏰ **Scheduled Inspections** — Supports configurable interval-based scheduled inspections
 - 🐳 **Docker Deployment** — GHCR image available, can be deployed alongside `new-api` in the same stack
@@ -140,9 +140,17 @@ bun run build
 | 🔄 Manual Inspection | Trigger a manual check (no Discord by default) |
 | 📄 Report View | View the latest generated operations report |
 | 📡 Channel Snapshot | View sanitized channel information |
-| 🔑 User Tokens | Enforce the device/酒馆-or-tt酒馆/purpose naming policy and draft disable approvals |
+| 🔑 User Tokens | Semantically check device, Tavern use, and purpose text, with manual-review and second-pass results |
 | 🤖 Action Queue | Review AI-proposed actions, execute or reject pending operations |
 | ⚙️ Execution Settings | Configure AI permissions, confirmation strategy, and protected channel rules |
+
+### AI User Token Inspection
+
+- By default, every 60 minutes it reads all eligible active tokens in the current database, rather than only users with recent calls.
+- Names must communicate a device or runtime location, the `酒馆`/`tt酒馆` client-use family, and a concrete purpose. Order, spacing, case, and separators are flexible, and aliases such as `ST`, `SillyTavern`, and `TauriTavern` are recognized.
+- Each AI request includes at most 1,000 token IDs, names, and minimal user metadata—never actual token secrets. The AI returns anomalies only, and invalid responses trigger smaller retry batches.
+- Missing or ambiguous information becomes a manual-review finding. Clear block candidates receive an independent second AI decision.
+- Multiple bad tokens are grouped into one user action. Direct execution requires two confirming AI passes, the configured confidence threshold, and the disable-user confirmation strategy set to automatic; manual approval remains the default.
 
 ## 🐳 Docker Deployment
 

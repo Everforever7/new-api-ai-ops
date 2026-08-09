@@ -7,12 +7,13 @@ import type {
 } from './types/domain'
 import {
   groupTokenFindingsByUser,
-  inspectTokenNames,
   matchCurrentTokenEvidence,
-  type TokenInspectionResult,
+  selectTokenInspectionCandidates,
+  summarizeUserTokenFindings,
+  type TokenInspectionSelection,
   type TokenNameFinding,
 } from './tokenInspection'
-import { reviewAmbiguousTokenNames } from './ai/tokenInspection'
+import { reviewAllTokenNames } from './ai/tokenInspection'
 import { NewApiClient } from './newapi/client'
 import { loadOpsSettings, type OpsSettings } from './settings'
 import { logger } from './logger'
@@ -624,12 +625,27 @@ function withChannelIdentity(action: OpsAction, channel?: Channel) {
   })
 }
 
-function userDisableEvidence(action: OpsAction) {
+function userDisableEvidence(
+  action: OpsAction,
+  autoDisableConfidence?: number
+) {
   const values = Array.isArray(action.payload?.findings)
     ? action.payload.findings
     : []
   return values.flatMap((value) => {
     if (!isRecord(value)) return []
+    const confidence = Number(value.confidence)
+    if (
+      autoDisableConfidence !== undefined &&
+      (
+        value.severity !== 'block' ||
+        value.blockVerified !== true ||
+        !Number.isFinite(confidence) ||
+        confidence < Math.max(0.98, autoDisableConfidence)
+      )
+    ) {
+      return []
+    }
     const tokenId = Number(value.tokenId ?? value.token_id)
     const tokenName = typeof value.tokenName === 'string'
       ? value.tokenName
@@ -654,7 +670,12 @@ async function validateDisableUserAction(
     })
   }
 
-  const evidence = userDisableEvidence(action)
+  const evidence = userDisableEvidence(
+    action,
+    action.requiresConfirm === false
+      ? settings.tokenInspection.autoDisableConfidence
+      : undefined
+  )
   if (!evidence.length) {
     return updateAction(action, {
       status: 'blocked',
@@ -680,8 +701,8 @@ async function validateDisableUserAction(
     })
   }
 
-  const current = inspectTokenNames(tokens, settings.tokenInspection)
-  const stillValid = matchCurrentTokenEvidence(current.findings, evidence)
+  const current = selectTokenInspectionCandidates(tokens, settings.tokenInspection)
+  const stillValid = matchCurrentTokenEvidence(current.candidates, evidence)
   if (!stillValid.length) {
     return updateAction(action, {
       status: 'blocked',
@@ -1152,7 +1173,11 @@ export async function buildActiveTestActionDrafts(
   return drafts
 }
 
-export type TokenInspectionActionPlan = TokenInspectionResult & {
+export type TokenInspectionActionPlan = Omit<
+  TokenInspectionSelection,
+  'candidates'
+> & {
+  compliantTokens: number
   usersFlagged: number
   findings: TokenNameFinding[]
   actions: OpsAction[]
@@ -1165,42 +1190,49 @@ export async function buildTokenInspectionActionDrafts(
   const settings = await loadOpsSettings()
   const client = new NewApiClient(config.newApi)
   const tokens = (await client.getAdminTokens()).items
-  const inspection = inspectTokenNames(tokens, settings.tokenInspection)
-  let findings = inspection.findings
-
-  if (settings.tokenInspection.aiReviewEnabled && findings.some(
-    (finding) => finding.verdict === 'ambiguous'
-  )) {
-    try {
-      findings = await reviewAmbiguousTokenNames(
-        config,
-        findings,
-        settings.tokenInspection.allowedClients
-      )
-    } catch (error) {
-      logger.warn('AI token-name review failed; keeping findings for manual review', error)
-    }
-  }
+  const inspection = selectTokenInspectionCandidates(
+    tokens,
+    settings.tokenInspection
+  )
+  const findings = await reviewAllTokenNames(
+    config,
+    inspection.candidates,
+    settings.tokenInspection.allowedClients
+  )
 
   const groups = groupTokenFindingsByUser(findings)
   const drafts: OpsAction[] = []
   for (const [index, group] of groups
     .slice(0, settings.tokenInspection.maxActionsPerRun)
     .entries()) {
+    const findingSummary = summarizeUserTokenFindings(
+      group.findings,
+      settings.tokenInspection.autoDisableConfidence
+    )
     const names = group.findings
       .slice(0, 3)
       .map((finding) => `“${finding.tokenName}”`)
       .join('、')
+    const decisionSummary = [
+      findingSummary.verifiedBlockCount
+        ? `${findingSummary.verifiedBlockCount} 个经两轮 AI 确认达到封禁标准`
+        : '',
+      findingSummary.reviewCount
+        ? `${findingSummary.reviewCount} 个需要人工复核`
+        : '',
+    ].filter(Boolean).join('，')
     const action = createOpsAction({
       action: 'disable_user',
       target: group.username,
       user_id: group.userId,
       username: group.username,
-      risk: 'high',
+      risk: findingSummary.verifiedBlockCount > 0
+        ? 'high'
+        : 'medium',
       requires_confirm: true,
-      reason: `用户存在 ${group.findings.length} 个不符合令牌命名策略的活动令牌：${names}`,
+      reason: `AI 语义巡视发现 ${group.findings.length} 个异常活动令牌（${decisionSummary}）：${names}`,
       payload: {
-        policyVersion: 'tavern-token-name-v1',
+        policyVersion: 'tavern-token-name-v2',
         findings: group.findings,
       },
     }, index, 'token_inspection')
@@ -1256,16 +1288,12 @@ export async function buildTokenInspectionActionDrafts(
 
     const canAutoDisable =
       settings.aiExecution.confirmation.disableUser === 'auto' &&
-      group.findings.every(
-        (finding) =>
-          finding.verdict === 'non_compliant' &&
-          finding.confidence >= settings.tokenInspection.autoDisableConfidence
-      )
+      findingSummary.autoDisableEligibleCount > 0
     if (canAutoDisable) {
       drafts.push(await confirmAndExecuteAction(config, updateAction(checked, {
         status: 'queued',
         requiresConfirm: false,
-        statusReason: '令牌命名违规达到自动封禁阈值',
+        statusReason: `${findingSummary.autoDisableEligibleCount} 个令牌经两轮 AI 确认并达到自动封禁阈值`,
       })))
       continue
     }
@@ -1273,14 +1301,16 @@ export async function buildTokenInspectionActionDrafts(
     drafts.push(updateAction(checked, {
       status: 'pending_confirmation',
       requiresConfirm: true,
-      statusReason: group.findings.some((finding) => finding.verdict === 'ambiguous')
-        ? '令牌用途需要人工复核'
-        : '等待人工确认封禁用户',
+      statusReason: findingSummary.verifiedBlockCount > 0
+        ? `${findingSummary.verifiedBlockCount} 个令牌经两轮 AI 确认为严重违规，等待人工确认封禁用户`
+        : 'AI 语义巡视发现命名信息缺失或含义不明确，等待人工复核',
     }))
   }
 
+  const { candidates: _, ...inspectionSummary } = inspection
   return {
-    ...inspection,
+    ...inspectionSummary,
+    compliantTokens: inspection.inspectedTokens - findings.length,
     findings,
     usersFlagged: groups.length,
     actions: drafts,

@@ -127,11 +127,10 @@ export const DEFAULT_OPS_SETTINGS = {
   },
   tokenInspection: {
     enabled: false,
-    intervalMinutes: 30,
+    intervalMinutes: 60,
     graceHours: 24,
     maxActionsPerRun: 20,
     actionCooldownHours: 24,
-    aiReviewEnabled: true,
     autoDisableConfidence: 0.99,
     allowedClients: ['酒馆', 'tt酒馆'],
     exemptUserGroups: [],

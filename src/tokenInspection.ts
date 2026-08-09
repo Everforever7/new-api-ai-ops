@@ -3,22 +3,29 @@ import type { AdminToken } from './types/domain'
 const TOKEN_STATUS_ENABLED = 1
 const USER_STATUS_ENABLED = 1
 const ADMIN_ROLE = 10
-const GENERIC_DEVICE_NAMES = new Set(['设备', 'device', 'unknown', '未知'])
-const GENERIC_PURPOSES = new Set([
-  'test',
-  '测试',
-  '随便',
-  '其他',
-  '未知',
-  'unknown',
-  'default',
-  'api',
-])
 
 export type TokenInspectionPolicy = {
   allowedClients: string[]
   exemptUserGroups: string[]
   graceHours: number
+}
+
+export type TokenInspectionCandidate = {
+  tokenId: number
+  userId: number
+  username: string
+  tokenName: string
+  userGroup: string
+  userRole: number
+}
+
+export type TokenInspectionSelection = {
+  scannedTokens: number
+  inspectedTokens: number
+  skippedTokens: number
+  protectedTokens: number
+  graceTokens: number
+  candidates: TokenInspectionCandidate[]
 }
 
 export type TokenNameFinding = {
@@ -29,23 +36,11 @@ export type TokenNameFinding = {
   userGroup: string
   userRole: number
   verdict: 'ambiguous' | 'non_compliant'
+  severity?: 'review' | 'block'
   confidence: number
+  reasonCode?: string
+  blockVerified?: boolean
   violations: string[]
-  parsed?: {
-    device: string
-    client: string
-    purpose: string
-  }
-}
-
-export type TokenInspectionResult = {
-  scannedTokens: number
-  inspectedTokens: number
-  compliantTokens: number
-  skippedTokens: number
-  protectedTokens: number
-  graceTokens: number
-  findings: TokenNameFinding[]
 }
 
 export type UserTokenFindings = {
@@ -54,13 +49,6 @@ export type UserTokenFindings = {
   userGroup: string
   userRole: number
   findings: TokenNameFinding[]
-}
-
-export type TokenNameReview = {
-  tokenId: number
-  verdict: 'compliant' | 'ambiguous' | 'non_compliant'
-  confidence: number
-  reason: string
 }
 
 export type TokenFindingEvidence = {
@@ -95,70 +83,15 @@ function withinGracePeriod(
   return currentTime.getTime() - createdAtMs < policy.graceHours * 60 * 60 * 1000
 }
 
-function inspectTokenName(token: AdminToken, policy: TokenInspectionPolicy) {
-  const segments = token.name.split('/').map((segment) => segment.trim())
-  const violations: string[] = []
-
-  if (segments.length !== 3) {
-    violations.push('令牌名称必须使用“设备名称/酒馆或tt酒馆/用途说明”三段式结构')
-  }
-
-  const device = segments[0] || ''
-  const client = segments[1] || ''
-  const purpose = segments[2] || ''
-  if (segments.length === 3) {
-    if (!device) violations.push('缺少设备名称')
-    if (!client || !matchesAny(client, policy.allowedClients)) {
-      violations.push('客户端只能填写“酒馆”或“tt酒馆”')
-    }
-    if (!purpose) violations.push('缺少用途说明')
-  }
-
-  const parsed = { device, client, purpose }
-  if (!violations.length) {
-    const ambiguous =
-      GENERIC_DEVICE_NAMES.has(normalizedText(device)) ||
-      GENERIC_PURPOSES.has(normalizedText(purpose)) ||
-      purpose.length < 2
-    if (!ambiguous) return undefined
-    return {
-      tokenId: token.id,
-      userId: token.user_id,
-      username: token.username,
-      tokenName: token.name,
-      userGroup: token.user_group,
-      userRole: token.user_role,
-      verdict: 'ambiguous' as const,
-      confidence: 0.5,
-      violations: ['设备名称或用途说明过于笼统，需要 AI 或人工复核'],
-      parsed,
-    }
-  }
-  return {
-    tokenId: token.id,
-    userId: token.user_id,
-    username: token.username,
-    tokenName: token.name,
-    userGroup: token.user_group,
-    userRole: token.user_role,
-    verdict: 'non_compliant' as const,
-    confidence: 1,
-    violations,
-    ...(segments.length === 3 ? { parsed } : {}),
-  }
-}
-
-export function inspectTokenNames(
+export function selectTokenInspectionCandidates(
   tokens: AdminToken[],
   policy: TokenInspectionPolicy,
   currentTime = new Date()
-): TokenInspectionResult {
-  let inspectedTokens = 0
-  let compliantTokens = 0
+): TokenInspectionSelection {
   let skippedTokens = 0
   let protectedTokens = 0
   let graceTokens = 0
-  const findings: TokenNameFinding[] = []
+  const candidates: TokenInspectionCandidate[] = []
 
   for (const token of tokens) {
     if (token.status !== TOKEN_STATUS_ENABLED || token.user_status !== USER_STATUS_ENABLED) {
@@ -173,24 +106,23 @@ export function inspectTokenNames(
       graceTokens += 1
       continue
     }
-
-    inspectedTokens += 1
-    const finding = inspectTokenName(token, policy)
-    if (!finding) {
-      compliantTokens += 1
-      continue
-    }
-    findings.push(finding)
+    candidates.push({
+      tokenId: token.id,
+      userId: token.user_id,
+      username: token.username,
+      tokenName: token.name,
+      userGroup: token.user_group,
+      userRole: token.user_role,
+    })
   }
 
   return {
     scannedTokens: tokens.length,
-    inspectedTokens,
-    compliantTokens,
+    inspectedTokens: candidates.length,
     skippedTokens,
     protectedTokens,
     graceTokens,
-    findings,
+    candidates,
   }
 }
 
@@ -215,38 +147,29 @@ export function groupTokenFindingsByUser(
   return [...grouped.values()]
 }
 
-export function applyTokenNameReviews(
+export function summarizeUserTokenFindings(
   findings: TokenNameFinding[],
-  reviews: TokenNameReview[]
-): TokenNameFinding[] {
-  const reviewByTokenId = new Map(
-    reviews
-      .filter((review) => Number.isInteger(review.tokenId))
-      .map((review) => [review.tokenId, review])
-  )
-
-  return findings.flatMap((finding) => {
-    if (finding.verdict !== 'ambiguous') return [finding]
-    const review = reviewByTokenId.get(finding.tokenId)
-    if (!review) return [finding]
-    const confidence = Math.min(Math.max(Number(review.confidence) || 0, 0), 1)
-    if (review.verdict === 'compliant' && confidence >= 0.9) return []
-    if (review.verdict !== 'non_compliant') return [finding]
-
-    return [{
-      ...finding,
-      verdict: 'non_compliant',
-      confidence,
-      violations: [
-        ...finding.violations,
-        `AI 复核：${review.reason.trim() || '用途说明不符合命名策略'}`,
-      ],
-    }]
-  })
+  autoDisableConfidence: number
+) {
+  const effectiveThreshold = Math.max(0.98, autoDisableConfidence)
+  let verifiedBlockCount = 0
+  let autoDisableEligibleCount = 0
+  for (const finding of findings) {
+    if (finding.severity !== 'block' || finding.blockVerified !== true) continue
+    verifiedBlockCount += 1
+    if (finding.confidence >= effectiveThreshold) {
+      autoDisableEligibleCount += 1
+    }
+  }
+  return {
+    reviewCount: findings.length - verifiedBlockCount,
+    verifiedBlockCount,
+    autoDisableEligibleCount,
+  }
 }
 
 export function matchCurrentTokenEvidence(
-  findings: TokenNameFinding[],
+  findings: Array<Pick<TokenInspectionCandidate, 'tokenId' | 'tokenName'>>,
   evidence: TokenFindingEvidence[]
 ) {
   return findings.filter((finding) =>

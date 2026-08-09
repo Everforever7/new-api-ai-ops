@@ -88,7 +88,6 @@ export type OpsSettings = {
     graceHours: number
     maxActionsPerRun: number
     actionCooldownHours: number
-    aiReviewEnabled: boolean
     autoDisableConfidence: number
     allowedClients: string[]
     exemptUserGroups: string[]
@@ -580,16 +579,11 @@ export function normalizeOpsSettings(
         0,
         8_760
       ),
-      aiReviewEnabled: readBoolean(
-        tokenInspection,
-        'aiReviewEnabled',
-        defaults.tokenInspection.aiReviewEnabled
-      ),
       autoDisableConfidence: readFloat(
         tokenInspection,
         'autoDisableConfidence',
         defaults.tokenInspection.autoDisableConfidence,
-        0,
+        0.98,
         1
       ),
       allowedClients: readStringArray(
