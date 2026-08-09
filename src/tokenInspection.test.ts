@@ -1,5 +1,8 @@
 import { describe, expect, test } from 'bun:test'
-import { createOpsAction } from './actions'
+import {
+  createOpsAction,
+  reconcileTokenInspectionActions,
+} from './actions'
 import {
   groupTokenFindingsByUser,
   matchCurrentTokenEvidence,
@@ -63,8 +66,8 @@ describe('selectTokenInspectionCandidates', () => {
     expect(tokenPolicyRouteForGroup(' DEFAULT ')).toBe('tavern')
     expect(tokenPolicyRouteForGroup('代码')).toBe('code')
     expect(tokenPolicyRouteForGroup(' 代码 ')).toBe('code')
-    expect(tokenPolicyRouteForGroup('code')).toBe('manual_review')
-    expect(tokenPolicyRouteForGroup('其他')).toBe('manual_review')
+    expect(tokenPolicyRouteForGroup('code')).toBe('out_of_scope')
+    expect(tokenPolicyRouteForGroup('其他')).toBe('out_of_scope')
   })
 
   test('inherits the user group when the token group is empty', () => {
@@ -78,14 +81,26 @@ describe('selectTokenInspectionCandidates', () => {
       result.candidates[0]?.tokenGroup || ''
     )).toBe('tavern')
 
-    const custom = selectTokenInspectionCandidates(
-      [token({ token_group: '', user_group: 'RP' })],
+  })
+
+  test('sends only default and 代码 groups to AI', () => {
+    const result = selectTokenInspectionCandidates(
+      [
+        token({ id: 1, token_group: 'default' }),
+        token({ id: 2, token_group: '代码' }),
+        token({ id: 3, token_group: '向量模型' }),
+        token({ id: 4, token_group: 'RP' }),
+        token({ id: 5, token_group: '', user_group: 'default' }),
+      ],
       policy
     )
-    expect(custom.candidates[0]?.tokenGroup).toBe('RP')
-    expect(tokenPolicyRouteForGroup(
-      custom.candidates[0]?.tokenGroup || ''
-    )).toBe('manual_review')
+
+    expect(result.candidates.map((candidate) => candidate.tokenGroup)).toEqual([
+      'default',
+      '代码',
+      'default',
+    ])
+    expect(result.outOfScopeTokens).toBe(2)
   })
 
   test('skips disabled and protected users before sending names to AI', () => {
@@ -227,6 +242,40 @@ test('creates a user-targeted disable action without channel identity', () => {
   expect(action.username).toBe('alice')
   expect(action.channelId).toBeUndefined()
   expect(action.channelName).toBeUndefined()
+})
+
+test('replaces stale open token-inspection actions after a successful run', () => {
+  const tokenAction = (
+    userId: number,
+    source: 'token_inspection' | 'report' = 'token_inspection'
+  ) =>
+    createOpsAction({
+      action: source === 'token_inspection' ? 'disable_user' : 'test_channel',
+      target: `target-${userId}`,
+      user_id: userId,
+      channel_id: source === 'token_inspection' ? undefined : userId,
+      risk: 'medium',
+      requires_confirm: true,
+      reason: 'test action',
+    }, userId, source)
+
+  const staleDefault = tokenAction(1)
+  const staleVector = tokenAction(2)
+  const executing = {
+    ...tokenAction(4),
+    status: 'executing' as const,
+  }
+  const unrelated = tokenAction(3, 'report')
+  const currentDefault = tokenAction(1)
+
+  expect(reconcileTokenInspectionActions(
+    [staleDefault, staleVector, executing, unrelated],
+    [currentDefault]
+  ).map((action) => action.id)).toEqual([
+    currentDefault.id,
+    executing.id,
+    unrelated.id,
+  ])
 })
 
 test('invalidates approval evidence after the token name or group changes', () => {

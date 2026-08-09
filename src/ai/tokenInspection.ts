@@ -47,6 +47,9 @@ export function validateIssueOnlyResponse(
     const tokenId = Number(issue.token_id ?? issue.tokenId)
     const candidate = candidateById.get(tokenId)
     if (!candidate) return []
+    if (tokenPolicyRouteForGroup(candidate.tokenGroup) === 'out_of_scope') {
+      return []
+    }
     if (seen.has(tokenId)) {
       throw new Error(`AI token review returned duplicate token_id ${tokenId}`)
     }
@@ -70,9 +73,8 @@ export function validateIssueOnlyResponse(
       throw new Error(`AI token review returned incomplete reason for token ${tokenId}`)
     }
     const validRequestedSeverity = requestedSeverity as 'review' | 'block'
-    const severity: 'review' | 'block' = (
+    const severity: 'review' | 'block' =
       requestedSeverity === 'block' && confidence < 0.98
-    ) || tokenPolicyRouteForGroup(candidate.tokenGroup) === 'manual_review'
       ? 'review'
       : validRequestedSeverity
 
@@ -89,25 +91,6 @@ export function validateIssueOnlyResponse(
     }]
   })
 
-  for (const candidate of context.candidates) {
-    if (
-      tokenPolicyRouteForGroup(candidate.tokenGroup) !== 'manual_review' ||
-      seen.has(candidate.tokenId)
-    ) {
-      continue
-    }
-    findings.push({
-      ...candidate,
-      verdict: 'ambiguous',
-      severity: 'review',
-      confidence: 1,
-      reasonCode: 'unsupported_token_group',
-      violations: [
-        `令牌分组“${candidate.tokenGroup || '空分组'}”未配置命名策略，需要人工复核`,
-      ],
-      blockVerified: false,
-    })
-  }
   return findings
 }
 
@@ -211,7 +194,7 @@ function policyPrompt(allowedClients: string[]) {
     'tavern 规则的设备或位置可包括本地、电脑、手机、NAS、服务器及具体设备名；用途可以是 RP、RPR、文爱、填表、文生图提示词、插件总结、数据库召回等有意义描述。',
     'policy=code（token_group=代码）：名称只需写清 IDE/开发工具或开发环境，以及代码相关作用；不要求设备信息，也不要求酒馆客户端。',
     'code 规则可接受 VSCode、Visual Studio、Cursor、JetBrains、IDEA、PyCharm、WebStorm、Android Studio、Xcode、Vim、Neovim、Emacs、Zed、Sublime Text、Termux 等；作用可包括 coding/代码、开发、补全、调试、审查、重构、脚本等。',
-    'policy=manual_review：必须输出 review，reason_code 使用 unsupported_token_group，不得输出 block。',
+    '输入只包含 policy=tavern 或 policy=code；不得自行扩展到其他令牌分组。',
     '所有规则的名称顺序、大小写、空格和分隔符均不固定；缺少必要信息、别名有歧义或用途过于笼统时使用 review。',
     '只有相对于当前 policy 明确属于其他用途、完全无关或明显规避规则时才使用 block；block 需要至少 0.98 置信度，否则使用 review。',
   ].join('\n')

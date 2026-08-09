@@ -65,6 +65,20 @@ export function isOpenAction(action: Pick<OpsAction, 'status'>) {
   )
 }
 
+export function reconcileTokenInspectionActions(
+  existing: OpsAction[],
+  current: OpsAction[]
+) {
+  return [
+    ...current.filter(isOpenAction),
+    ...existing.filter(
+      (action) =>
+        action.source !== 'token_inspection' ||
+        !['queued', 'pending_confirmation'].includes(action.status)
+    ),
+  ]
+}
+
 export type RawAction = {
   action?: unknown
   target?: unknown

@@ -10,7 +10,7 @@ export type TokenInspectionPolicy = {
   graceHours: number
 }
 
-export type TokenPolicyRoute = 'tavern' | 'code' | 'manual_review'
+export type TokenPolicyRoute = 'tavern' | 'code' | 'out_of_scope'
 
 export type TokenInspectionCandidate = {
   tokenId: number
@@ -28,6 +28,7 @@ export type TokenInspectionSelection = {
   skippedTokens: number
   protectedTokens: number
   graceTokens: number
+  outOfScopeTokens: number
   candidates: TokenInspectionCandidate[]
 }
 
@@ -76,7 +77,7 @@ export function tokenPolicyRouteForGroup(
   const normalized = normalizedText(tokenGroup)
   if (normalized === 'default') return 'tavern'
   if (tokenGroup.trim() === '代码') return 'code'
-  return 'manual_review'
+  return 'out_of_scope'
 }
 
 function isProtected(token: AdminToken, policy: TokenInspectionPolicy) {
@@ -105,6 +106,7 @@ export function selectTokenInspectionCandidates(
   let skippedTokens = 0
   let protectedTokens = 0
   let graceTokens = 0
+  let outOfScopeTokens = 0
   const candidates: TokenInspectionCandidate[] = []
 
   for (const token of tokens) {
@@ -120,12 +122,19 @@ export function selectTokenInspectionCandidates(
       graceTokens += 1
       continue
     }
+    const tokenGroup = String(
+      token.token_group || token.user_group || ''
+    ).trim()
+    if (tokenPolicyRouteForGroup(tokenGroup) === 'out_of_scope') {
+      outOfScopeTokens += 1
+      continue
+    }
     candidates.push({
       tokenId: token.id,
       userId: token.user_id,
       username: token.username,
       tokenName: token.name,
-      tokenGroup: String(token.token_group || token.user_group || '').trim(),
+      tokenGroup,
       userGroup: token.user_group,
       userRole: token.user_role,
     })
@@ -137,6 +146,7 @@ export function selectTokenInspectionCandidates(
     skippedTokens,
     protectedTokens,
     graceTokens,
+    outOfScopeTokens,
     candidates,
   }
 }

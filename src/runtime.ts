@@ -15,6 +15,7 @@ import {
   confirmAndExecuteAction,
   createOpsAction,
   isOpenAction,
+  reconcileTokenInspectionActions,
   rejectAction,
   sanitizeActionForClient,
   type OpsAction,
@@ -315,26 +316,15 @@ export class OpsRuntime {
     try {
       logger.info('running user token-name inspection')
       const result = await buildTokenInspectionActionDrafts(this.config)
-      const actions = result.actions.filter(
-        (action) =>
-          !isOpenAction(action) ||
-          !this.actions.some(
-            (existing) =>
-              isOpenAction(existing) &&
-              existing.action === action.action &&
-              existing.userId === action.userId
-          )
-      )
-      this.actions = [
-        ...actions.filter(isOpenAction),
-        ...this.actions,
-      ]
+      const actions = result.actions
+      this.actions = reconcileTokenInspectionActions(this.actions, actions)
       await this.persistActions()
       this.lastTokenInspection = { ...result, actions }
       saveJsonValue(TOKEN_INSPECTION_RESULT_KEY, this.lastTokenInspection)
       logger.info('user token-name inspection completed', {
         scannedTokens: result.scannedTokens,
         inspectedTokens: result.inspectedTokens,
+        outOfScopeTokens: result.outOfScopeTokens,
         findings: result.findings.length,
         usersFlagged: result.usersFlagged,
         actions: actions.length,

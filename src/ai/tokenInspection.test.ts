@@ -111,11 +111,11 @@ test('sends the token group and backend-selected policy route to AI', () => {
   expect(buildTokenReviewItems(candidates)).toEqual([
     { token_id: 1, user_id: 1, name: 'name-1', token_group: 'default', policy: 'tavern' },
     { token_id: 2, user_id: 2, name: 'name-2', token_group: '代码', policy: 'code' },
-    { token_id: 3, user_id: 3, name: 'name-3', token_group: 'code', policy: 'manual_review' },
+    { token_id: 3, user_id: 3, name: 'name-3', token_group: 'code', policy: 'out_of_scope' },
   ])
 })
 
-test('forces an omitted unknown token group into manual review', () => {
+test('omits out-of-scope token groups even if AI returns an issue', () => {
   const candidate = {
     tokenId: 8,
     userId: 8,
@@ -127,53 +127,21 @@ test('forces an omitted unknown token group into manual review', () => {
   }
 
   const findings = validateIssueOnlyResponse({
-    review_id: 'review-unknown-group',
-    processed_count: 1,
-    issues: [],
-  }, {
-    reviewId: 'review-unknown-group',
-    candidates: [candidate],
-  })
-
-  expect(findings).toEqual([{
-    ...candidate,
-    verdict: 'ambiguous',
-    severity: 'review',
-    confidence: 1,
-    reasonCode: 'unsupported_token_group',
-    violations: ['令牌分组“其他”未配置命名策略，需要人工复核'],
-    blockVerified: false,
-  }])
-})
-
-test('downgrades an AI block for an unknown token group to manual review', () => {
-  const candidate = {
-    tokenId: 9,
-    userId: 9,
-    username: 'user-9',
-    tokenName: 'unrecognized-group-name',
-    tokenGroup: '其他',
-    userGroup: 'default',
-    userRole: 1,
-  }
-
-  const [finding] = validateIssueOnlyResponse({
-    review_id: 'review-unknown-block',
+    review_id: 'review-out-of-scope',
     processed_count: 1,
     issues: [{
-      token_id: 9,
-      severity: 'block',
-      confidence: 0.999,
-      reason_code: 'unrelated_usage',
-      reason: '模型认为用途不相关',
+      token_id: 8,
+      severity: 'review',
+      confidence: 1,
+      reason_code: 'ignored_scope',
+      reason: '范围外分组',
     }],
   }, {
-    reviewId: 'review-unknown-block',
+    reviewId: 'review-out-of-scope',
     candidates: [candidate],
   })
 
-  expect(finding?.severity).toBe('review')
-  expect(finding?.blockVerified).toBe(false)
+  expect(findings).toEqual([])
 })
 
 test('downgrades a low-confidence block label to manual review', () => {

@@ -148,7 +148,7 @@ bun run build
 
 - By default, every 60 minutes it reads all eligible active tokens in the current database, rather than only users with recent calls.
 - AI routes by each token's `token_group`; an empty token group inherits the user group, matching `new-api` semantics. `default` requires a device/runtime location, the `酒馆`/`tt酒馆` family, and a concrete purpose; `代码` only requires an IDE/development tool or environment and its purpose, such as `VSCode coding`, `Cursor project development`, or `PyCharm script debugging`. Order, spacing, case, and separators are flexible.
-- Other token groups always enter manual review and never become direct-block candidates; the inspection panel displays the token group.
+- Other token groups are outside the inspection scope and are skipped before AI review, so they create no findings or approval actions. The panel displays groups for in-scope findings.
 - Each AI request includes at most 1,000 token IDs, names, and minimal user metadata—never actual token secrets. The AI returns anomalies only, and invalid responses trigger smaller retry batches.
 - Missing or ambiguous information becomes a manual-review finding. Clear block candidates receive an independent second AI decision.
 - Multiple bad tokens are grouped into one user action. Direct execution requires two confirming AI passes, the configured confidence threshold, and the disable-user confirmation strategy set to automatic. Token ID, name, and group are revalidated before execution; manual approval remains the default.
