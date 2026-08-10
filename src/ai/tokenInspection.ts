@@ -16,6 +16,9 @@ type ChatCompletionResponse = {
 
 type EffectiveLlmConfig = Awaited<ReturnType<typeof loadEffectiveLlmConfig>>
 
+export const TOKEN_REVIEW_BATCH_SIZE = 100
+export const TOKEN_REVIEW_MIN_BATCH_SIZE = 25
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === 'object' && !Array.isArray(value)
 }
@@ -113,7 +116,7 @@ export async function reviewCandidatesWithFallback(
   review: (
     batch: TokenInspectionCandidate[]
   ) => Promise<TokenNameFinding[]>,
-  minimumBatchSize = 250
+  minimumBatchSize = TOKEN_REVIEW_MIN_BATCH_SIZE
 ): Promise<TokenNameFinding[]> {
   if (!candidates.length) return []
   try {
@@ -268,6 +271,10 @@ function chunks<T>(items: T[], size: number) {
   return result
 }
 
+export function tokenReviewBatches<T>(items: T[]) {
+  return chunks(items, TOKEN_REVIEW_BATCH_SIZE)
+}
+
 function downgradeUnverifiedBlocks(findings: TokenNameFinding[]) {
   return findings.map((finding) =>
     finding.severity === 'block'
@@ -295,7 +302,7 @@ export async function reviewAllTokenNames(
   if (!llm.apiKey) throw new Error('用户令牌 AI 巡视需要配置 LLM API Key')
 
   const findings: TokenNameFinding[] = []
-  for (const batch of chunks(candidates, 1_000)) {
+  for (const batch of tokenReviewBatches(candidates)) {
     findings.push(...await reviewCandidatesWithFallback(
       batch,
       (items) => reviewIssueBatch(llm, items, allowedClients)
@@ -309,11 +316,10 @@ export async function reviewAllTokenNames(
 
   try {
     const verification: TokenNameFinding[] = []
-    for (const batch of chunks(firstPassBlocks, 250)) {
+    for (const batch of tokenReviewBatches(firstPassBlocks)) {
       verification.push(...await reviewCandidatesWithFallback(
         batch,
-        (items) => verifyBlockBatch(llm, items, allowedClients),
-        50
+        (items) => verifyBlockBatch(llm, items, allowedClients)
       ))
     }
     const verificationById = new Map(

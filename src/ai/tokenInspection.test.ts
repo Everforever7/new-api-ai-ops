@@ -2,6 +2,7 @@ import { expect, test } from 'bun:test'
 import {
   buildTokenReviewItems,
   reviewCandidatesWithFallback,
+  tokenReviewBatches,
   validateBlockVerificationResponse,
   validateIssueOnlyResponse,
 } from './tokenInspection'
@@ -174,8 +175,26 @@ test('downgrades a low-confidence block label to manual review', () => {
   expect(finding?.verdict).toBe('ambiguous')
 })
 
-test('splits a failed 1000-token review down to complete 250-token retries', async () => {
-  const candidates = Array.from({ length: 1_000 }, (_, index) => ({
+test('limits token reviews to batches of 100', () => {
+  const candidates = Array.from({ length: 205 }, (_, index) => ({
+    tokenId: index + 1,
+    userId: index + 1,
+    username: `user-${index + 1}`,
+    tokenName: `name-${index + 1}`,
+    tokenGroup: 'default',
+    userGroup: 'default',
+    userRole: 1,
+  }))
+
+  expect(tokenReviewBatches(candidates).map((batch) => batch.length)).toEqual([
+    100,
+    100,
+    5,
+  ])
+})
+
+test('splits a failed 100-token review down to complete 25-token retries', async () => {
+  const candidates = Array.from({ length: 100 }, (_, index) => ({
     tokenId: index + 1,
     userId: index + 1,
     username: `user-${index + 1}`,
@@ -190,7 +209,7 @@ test('splits a failed 1000-token review down to complete 250-token retries', asy
     candidates,
     async (batch) => {
       batchSizes.push(batch.length)
-      if (batch.length > 250) throw new Error('processed_count mismatch')
+      if (batch.length > 25) throw new Error('processed_count mismatch')
       return batch[0]
         ? [{
             ...batch[0],
@@ -205,8 +224,8 @@ test('splits a failed 1000-token review down to complete 250-token retries', asy
     }
   )
 
-  expect(batchSizes).toEqual([1_000, 500, 250, 250, 500, 250, 250])
-  expect(findings.map((finding) => finding.tokenId)).toEqual([1, 251, 501, 751])
+  expect(batchSizes).toEqual([100, 50, 25, 25, 50, 25, 25])
+  expect(findings.map((finding) => finding.tokenId)).toEqual([1, 26, 51, 76])
 })
 
 test('requires a second-pass decision for every direct-block candidate', () => {
