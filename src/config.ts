@@ -50,11 +50,18 @@ function optional(value: string | undefined): string | undefined {
   return next ? next : undefined
 }
 
-function numberEnv(name: string, fallback: number): number {
+function numberEnv(
+  name: string,
+  fallback: number,
+  opts?: { min?: number; max?: number }
+): number {
   const raw = process.env[name]
   if (!raw) return fallback
   const parsed = Number(raw)
-  return Number.isFinite(parsed) ? parsed : fallback
+  if (!Number.isFinite(parsed)) return fallback
+  if (opts?.min !== undefined && parsed < opts.min) return opts.min
+  if (opts?.max !== undefined && parsed > opts.max) return opts.max
+  return parsed
 }
 
 function booleanEnv(name: string, fallback = false): boolean {
@@ -92,29 +99,37 @@ export function loadConfig(): AppConfig {
       authorization: optional(process.env.NEWAPI_AUTHORIZATION),
       userHeader: optional(process.env.NEWAPI_USER_HEADER),
       extraHeaders: extraHeadersEnv(),
-      timeoutMs: numberEnv(
-        'NEWAPI_REQUEST_TIMEOUT_MS',
-        defaults.newApi.timeoutMs
-      ),
+      timeoutMs: numberEnv('NEWAPI_REQUEST_TIMEOUT_MS', defaults.newApi.timeoutMs, {
+        min: 1000,
+        max: 120_000,
+      }),
       channelPageSize: numberEnv(
         'NEWAPI_CHANNEL_PAGE_SIZE',
-        defaults.newApi.channelPageSize
+        defaults.newApi.channelPageSize,
+        { min: 1, max: 1000 }
       ),
-      logPageSize: numberEnv(
-        'NEWAPI_LOG_PAGE_SIZE',
-        defaults.newApi.logPageSize
-      ),
-      logHours: numberEnv('NEWAPI_LOG_HOURS', defaults.newApi.logHours),
+      logPageSize: numberEnv('NEWAPI_LOG_PAGE_SIZE', defaults.newApi.logPageSize, {
+        min: 1,
+        max: 1000,
+      }),
+      logHours: numberEnv('NEWAPI_LOG_HOURS', defaults.newApi.logHours, {
+        min: 1,
+        max: 720,
+      }),
       balanceWarningUsd: numberEnv(
         'BALANCE_WARNING_USD',
-        defaults.newApi.balanceWarningUsd
+        defaults.newApi.balanceWarningUsd,
+        { min: 0 }
       ),
     },
     llm: {
       baseUrl: cleanUrl(process.env.LLM_BASE_URL || defaults.llm.baseUrl),
       apiKey: optional(process.env.LLM_API_KEY),
       model: process.env.LLM_MODEL?.trim() || defaults.llm.model,
-      temperature: numberEnv('LLM_TEMPERATURE', defaults.llm.temperature),
+      temperature: numberEnv('LLM_TEMPERATURE', defaults.llm.temperature, {
+        min: 0,
+        max: 2,
+      }),
     },
     discord: {
       webhookUrl: optional(process.env.DISCORD_WEBHOOK_URL),
@@ -122,12 +137,16 @@ export function loadConfig(): AppConfig {
     report: {
       intervalMinutes: numberEnv(
         'REPORT_INTERVAL_MINUTES',
-        defaults.report.intervalMinutes
+        defaults.report.intervalMinutes,
+        { min: 1, max: 1440 }
       ),
-      minRequests: numberEnv('REPORT_MIN_REQUESTS', defaults.report.minRequests),
+      minRequests: numberEnv('REPORT_MIN_REQUESTS', defaults.report.minRequests, {
+        min: 0,
+      }),
       failureRateThreshold: numberEnv(
         'REPORT_FAILURE_RATE_THRESHOLD',
-        defaults.report.failureRateThreshold
+        defaults.report.failureRateThreshold,
+        { min: 0, max: 1 }
       ),
       timezone: process.env.REPORT_TIMEZONE?.trim() || defaults.report.timezone,
       saveDir: process.env.REPORT_SAVE_DIR?.trim() || defaults.report.saveDir,
@@ -139,7 +158,10 @@ export function loadConfig(): AppConfig {
     panel: {
       enabled: booleanEnv('PANEL_ENABLED', defaults.panel.enabled),
       host: process.env.PANEL_HOST?.trim() || defaults.panel.host,
-      port: numberEnv('PANEL_PORT', defaults.panel.port),
+      port: numberEnv('PANEL_PORT', defaults.panel.port, {
+        min: 1,
+        max: 65535,
+      }),
       username: process.env.PANEL_USERNAME?.trim() || defaults.panel.username,
       password: optional(process.env.PANEL_PASSWORD),
     },

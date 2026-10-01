@@ -107,16 +107,25 @@ export class NewApiClient {
     if (first.items.length >= total) return first
 
     const pages = Math.ceil(total / this.config.channelPageSize)
-    const rest = await Promise.all(
-      Array.from({ length: pages - 1 }, (_, index) =>
-        this.request<ChannelListData>('/api/channel', {
-          query: {
-            p: index + 2,
-            page_size: this.config.channelPageSize,
-          },
-        })
+    // Fetch remaining pages in small batches to avoid overwhelming new-api
+    // with hundreds of concurrent requests when the channel count is large.
+    const CONCURRENCY = 5
+    const rest: ChannelListData[] = []
+    for (let start = 2; start <= pages; start += CONCURRENCY) {
+      const batch = await Promise.all(
+        Array.from(
+          { length: Math.min(CONCURRENCY, pages - start + 1) },
+          (_, index) =>
+            this.request<ChannelListData>('/api/channel', {
+              query: {
+                p: start + index,
+                page_size: this.config.channelPageSize,
+              },
+            })
+        )
       )
-    )
+      rest.push(...batch)
+    }
 
     return {
       ...first,
@@ -202,7 +211,7 @@ export class NewApiClient {
         signal: controller.signal,
       })
       const text = await response.text()
-      const json = text ? (JSON.parse(text) as ApiEnvelope<T>) : {}
+      const json = parseJsonResponse<ApiEnvelope<T>>(text, url)
 
       if (!response.ok) {
         if (response.status === 401 && retryAfterLogin) {
@@ -283,7 +292,10 @@ export class NewApiClient {
         signal: controller.signal,
       })
       const text = await response.text()
-      const json = text ? (JSON.parse(text) as ApiEnvelope<LoginData>) : {}
+      const json = parseJsonResponse<ApiEnvelope<LoginData>>(
+        text,
+        `${this.config.baseUrl}/api/user/login`
+      )
 
       if (!response.ok || json.success === false) {
         throw new Error(
@@ -350,4 +362,15 @@ function extractCookieHeader(headers: Headers) {
 function splitCombinedSetCookie(value: string | null) {
   if (!value) return []
   return value.split(/,(?=\s*[^;,\s]+=)/g).map((part) => part.trim())
+}
+
+function parseJsonResponse<T>(text: string, url: string): T {
+  if (!text) return {} as T
+  try {
+    return JSON.parse(text) as T
+  } catch {
+    throw new Error(
+      `new-api returned invalid JSON for ${url}: ${text.slice(0, 300)}`
+    )
+  }
 }
