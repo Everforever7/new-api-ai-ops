@@ -66,7 +66,12 @@ export async function generateOpsReport(
     )
   }
 
-  const json = JSON.parse(text) as ChatCompletionResponse
+  let json: ChatCompletionResponse
+  try {
+    json = JSON.parse(text) as ChatCompletionResponse
+  } catch {
+    throw new Error(`LLM returned invalid JSON: ${text.slice(0, 300)}`)
+  }
   const content = json.choices?.[0]?.message?.content?.trim()
   if (!content) {
     throw new Error('LLM response did not include message content')
